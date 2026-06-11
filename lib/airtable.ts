@@ -14,6 +14,12 @@ function cfg() {
   return { apiKey, baseId, table };
 }
 
+// All extended fields are now live in the Airtable base.
+// Set AIRTABLE_EXTENDED_FIELDS=false to disable writing them (emergency rollback only).
+function extendedFields() {
+  return process.env.AIRTABLE_EXTENDED_FIELDS !== "false";
+}
+
 function authHeaders(apiKey: string) {
   return {
     Authorization: `Bearer ${apiKey}`,
@@ -21,7 +27,6 @@ function authHeaders(apiKey: string) {
   };
 }
 
-// Map an Airtable record to our Initiative type.
 function toInitiative(rec: any): Initiative {
   const f = rec.fields || {};
   return {
@@ -34,17 +39,25 @@ function toInitiative(rec: any): Initiative {
     spansPods: Boolean(f["Spans Pods"]),
     timeframe: (f["Timeframe"] as Initiative["timeframe"]) || "Future",
     status: (f["Status"] as Initiative["status"]) || "To Do",
-    owner: f["Owner"] || "",
-    ownerSlackIds: f["Owner Slack IDs"] || "",
+    primaryAssignees: f["Primary Assignees"] || "",
+    supportAssignees: f["Support Assignees"] || "",
     link: f["Link"] || "",
     notes: f["Notes"] || "",
     order: typeof f["Order"] === "number" ? f["Order"] : 999,
+    tShirtSize: f["T-Shirt Size"] || "",
+    durationWeeks: typeof f["Duration Weeks"] === "number" ? f["Duration Weeks"] : 1,
+    tags: Array.isArray(f["Tags"]) ? f["Tags"] : [],
+    comments: (() => {
+      try { return f["Comments"] ? JSON.parse(f["Comments"]) : []; }
+      catch { return []; }
+    })(),
+    layers: Array.isArray(f["Layers"]) ? f["Layers"] : [],
   };
 }
 
-// Map our Initiative (partial) back to Airtable fields.
 function toFields(input: Partial<Initiative>): Record<string, any> {
   const f: Record<string, any> = {};
+  // Core fields — always exist in the base
   if (input.name !== undefined) f["Name"] = input.name;
   if (input.description !== undefined) f["Description"] = input.description;
   if (input.team !== undefined) f["Team"] = input.team || null;
@@ -53,11 +66,20 @@ function toFields(input: Partial<Initiative>): Record<string, any> {
   if (input.spansPods !== undefined) f["Spans Pods"] = Boolean(input.spansPods);
   if (input.timeframe !== undefined) f["Timeframe"] = input.timeframe || null;
   if (input.status !== undefined) f["Status"] = input.status || null;
-  if (input.owner !== undefined) f["Owner"] = input.owner;
-  if (input.ownerSlackIds !== undefined) f["Owner Slack IDs"] = input.ownerSlackIds;
   if (input.link !== undefined) f["Link"] = input.link;
   if (input.notes !== undefined) f["Notes"] = input.notes;
   if (input.order !== undefined) f["Order"] = input.order;
+
+  // Extended fields — only written after you add them in Airtable
+  if (extendedFields()) {
+    if (input.primaryAssignees !== undefined) f["Primary Assignees"] = input.primaryAssignees;
+    if (input.supportAssignees !== undefined) f["Support Assignees"] = input.supportAssignees;
+    if (input.tShirtSize !== undefined) f["T-Shirt Size"] = input.tShirtSize || null;
+    if (input.durationWeeks !== undefined) f["Duration Weeks"] = input.durationWeeks;
+    if (input.tags !== undefined) f["Tags"] = input.tags;
+    if (input.comments !== undefined) f["Comments"] = JSON.stringify(input.comments);
+    if (input.layers !== undefined) f["Layers"] = input.layers;
+  }
   return f;
 }
 

@@ -176,7 +176,7 @@ export async function GET(req: NextRequest) {
                               }}
                             >
                               {it.status}
-                              {it.owner ? ` · ${it.owner}` : ""}
+                              {it.primaryAssignees ? ` · ${it.primaryAssignees}` : ""}
                             </div>
                           </div>
                         ))}

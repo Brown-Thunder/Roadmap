@@ -3,7 +3,7 @@ import { Initiative, Timeframe, AREA_ORDER, TIMEFRAMES } from "./types";
 export interface Lane {
   key: string;
   label: string;
-  shared?: boolean; // spans Internal + 3rd Party lockers
+  shared?: boolean;
 }
 
 export interface AreaGroup {
@@ -11,18 +11,16 @@ export interface AreaGroup {
   lanes: Lane[];
 }
 
-// Decide which lane an initiative belongs to within its area.
 function laneKeyFor(i: Initiative): string {
   if (i.area === "Lockers") {
     if (i.spansPods) return "shared";
     if (i.pod === "Internal Lockers") return "Internal Lockers";
     if (i.pod === "3rd Party Lockers") return "3rd Party Lockers";
-    return "Internal Lockers"; // fallback
+    return "Internal Lockers";
   }
   return i.area;
 }
 
-// Build the ordered area groups + lanes that actually contain data.
 export function buildGroups(initiatives: Initiative[]): AreaGroup[] {
   const areas = Array.from(new Set(initiatives.map((i) => i.area).filter(Boolean)));
   areas.sort((a, b) => {
@@ -57,7 +55,6 @@ export function buildGroups(initiatives: Initiative[]): AreaGroup[] {
   });
 }
 
-// Get the initiatives in a given area/lane/timeframe cell, sorted.
 export function cellItems(
   initiatives: Initiative[],
   area: string,
@@ -80,6 +77,27 @@ export function filterByTeam(
 ): Initiative[] {
   if (!team || team === "All") return initiatives;
   return initiatives.filter((i) => i.team === team);
+}
+
+export function filterByAssignee(
+  initiatives: Initiative[],
+  assignee: string
+): Initiative[] {
+  if (!assignee || assignee === "All") return initiatives;
+  return initiatives.filter((i) => {
+    const primary = i.primaryAssignees.split(",").map((s) => s.trim()).filter(Boolean);
+    const support = i.supportAssignees.split(",").map((s) => s.trim()).filter(Boolean);
+    return primary.includes(assignee) || support.includes(assignee);
+  });
+}
+
+export function getAllAssignees(initiatives: Initiative[]): string[] {
+  const names = new Set<string>();
+  for (const i of initiatives) {
+    i.primaryAssignees.split(",").map((s) => s.trim()).filter(Boolean).forEach((n) => names.add(n));
+    i.supportAssignees.split(",").map((s) => s.trim()).filter(Boolean).forEach((n) => names.add(n));
+  }
+  return Array.from(names).sort();
 }
 
 export { TIMEFRAMES };

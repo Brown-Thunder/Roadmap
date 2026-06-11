@@ -7,23 +7,37 @@ export type Status =
   | "Blocked"
   | "Done";
 
+export type TShirtSize = "XS" | "S" | "M" | "L" | "XL";
+
 export type Area = "Lockers" | "Partnerships" | "Engineering" | "Organic Search";
+
+export interface Comment {
+  id: string;       // timestamp-based local id
+  author: string;
+  text: string;
+  createdAt: string; // ISO string
+}
 
 export interface Initiative {
   id: string;
   name: string;
   description: string;
-  team: string; // "Host/Platform" | "Customer"
+  team: string;
   area: string;
   pod: string;
   spansPods: boolean;
   timeframe: Timeframe;
   status: Status;
-  owner: string;
-  ownerSlackIds: string; // comma-separated
+  primaryAssignees: string; // comma-separated names
+  supportAssignees: string; // comma-separated names
   link: string;
   notes: string;
   order: number;
+  tShirtSize: TShirtSize | "";
+  durationWeeks: number; // 1 = single column, 2+ = spans columns
+  tags: string[];        // e.g. ["delayed", "priority"]
+  comments: Comment[];   // stored as JSON in Airtable long-text field
+  layers: string[];      // ["Frontend", "Backend"]
 }
 
 export const TIMEFRAMES: Timeframe[] = ["This Week", "Next Week", "Future"];
@@ -49,7 +63,6 @@ export const TIMEFRAME_ACCENT: Record<Timeframe, string> = {
   Future: "#64748b",
 };
 
-// Editable field option lists (kept in sync with the Airtable base schema)
 export const TEAM_OPTIONS = ["Host/Platform", "Customer"];
 export const AREA_OPTIONS = ["Lockers", "Partnerships", "Engineering", "Organic Search"];
 export const POD_OPTIONS = [
@@ -65,4 +78,18 @@ export const STATUS_OPTIONS: Status[] = [
   "At Risk",
   "Blocked",
   "Done",
+];
+export const TSHIRT_OPTIONS: TShirtSize[] = ["XS", "S", "M", "L", "XL"];
+export const LAYER_OPTIONS = ["Frontend", "Backend"] as const;
+export type Layer = typeof LAYER_OPTIONS[number];
+
+export const DEFAULT_TAGS = [
+  "priority",
+  "delayed",
+  "blocked",
+  "needs review",
+  "quick win",
+  "tech debt",
+  "discovery",
+  "dependencies",
 ];
