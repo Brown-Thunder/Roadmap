@@ -656,3 +656,98 @@ a.link:hover { text-decoration: underline; }
 @media (max-width: 520px) {
   .form-row-2, .form-row-3 { grid-template-columns: 1fr; }
 }
+
+/* ─── Mobile responsive ──────────────────────────────────────── */
+
+/* Tablet — up to 768px */
+@media (max-width: 768px) {
+  .page { padding: 12px 12px 32px; }
+
+  /* Topbar stacks brand on top, controls below */
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+  .controls {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .controls-divider { display: none; }
+  /* Filters side-by-side, buttons full-width below */
+  .filter-group { flex: 1; min-width: 120px; }
+  .select { min-width: 0; width: 100%; }
+
+  /* Board scrolls horizontally — keeps column widths readable */
+  .board-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .board { min-width: 640px; }
+  .grid,
+  .area-row,
+  .lane-row {
+    grid-template-columns: 130px 1fr 1fr 1fr;
+  }
+  .lane-label { font-size: 11.5px; padding: 10px 10px; }
+  .col-head { padding: 10px 10px 8px; }
+  .col-head-title { font-size: 12.5px; }
+  .col-head-date { font-size: 10px; }
+
+  /* Cards — slightly more compact */
+  .card { padding: 7px 9px; }
+  .card-name { font-size: 12px; }
+  .status-pill { font-size: 10px; padding: 2px 7px; }
+  .size-badge { font-size: 10px; }
+  .assignee-avatar { font-size: 10px; padding: 2px 6px; }
+
+  /* Legend wraps tightly */
+  .legend { gap: 10px; font-size: 11px; padding: 8px 12px; }
+}
+
+/* Phone — up to 480px */
+@media (max-width: 480px) {
+  .page { padding: 10px 10px 28px; }
+
+  .topbar { padding: 10px 12px; border-radius: 10px; }
+  .brand-wordmark { font-size: 15px; }
+  .brand-product { font-size: 13px; }
+  .topbar .sub { display: none; } /* hide hint on very small screens */
+
+  /* Action buttons go full-width */
+  .controls { flex-direction: column; align-items: stretch; }
+  .filter-group { flex: unset; }
+  /* Keep filters in a row */
+  .controls > .filter-group { flex: 1; }
+  .controls-row-filters {
+    display: flex; gap: 6px; width: 100%;
+  }
+  .btn { width: 100%; text-align: center; justify-content: center; }
+  .btn.icon-btn { width: auto; }
+
+  /* Board min-width so columns stay scannable */
+  .board { min-width: 580px; }
+  .grid,
+  .area-row,
+  .lane-row { grid-template-columns: 110px 1fr 1fr 1fr; }
+  .lane-label { font-size: 11px; padding: 8px; }
+  .area-label { font-size: 10px; padding: 8px 10px 4px; }
+  .cell { padding: 6px; min-height: 56px; gap: 4px; }
+
+  /* Modal goes full screen */
+  .overlay { padding: 0; align-items: flex-end; }
+  .modal {
+    border-radius: 20px 20px 0 0;
+    max-width: 100%;
+    max-height: 94vh;
+  }
+  .edit-modal { max-width: 100%; }
+  .modal-header { padding: 16px 18px 12px; }
+  .modal-header h2 { font-size: 16px; }
+  .modal-section { padding: 14px 18px; }
+  .form-section { padding: 14px 18px 2px; }
+  .modal-actions { padding: 12px 18px; border-radius: 0; }
+
+  /* Info table label column narrower */
+  .card-info-row { grid-template-columns: 120px 1fr; }
+  .card-info-key { font-size: 11px; padding: 8px 10px; }
+  .card-info-val { font-size: 12px; padding: 8px 10px; }
+}
