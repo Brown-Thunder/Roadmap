@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { toPng } from "html-to-image";
 import {
   DragDropContext,
@@ -11,10 +12,11 @@ import {
 import {
   Initiative,
   TIMEFRAMES,
-  STATUS_COLORS,
   TIMEFRAME_ACCENT,
   TEAM_OPTIONS,
   Timeframe,
+  colorForAssignee,
+  primaryAssigneeOf,
 } from "@/lib/types";
 import {
   buildGroups,
@@ -97,7 +99,19 @@ export default function RoadmapBoard({
   const [refreshing, setRefreshing] = useState(false);
   const [extraAreas, setExtraAreas] = useState<string[]>([]);
   const [extraPods, setExtraPods] = useState<string[]>([]);
+  // Live resize preview: while dragging the handle, track current visual duration
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  const [resizingDuration, setResizingDuration] = useState(1);
+  // Measured heights of spanning cards, keyed by id — used to reserve space
+  // in the columns a spanning card overlaps so other cards drop below it.
+  const [spanHeights, setSpanHeights] = useState<Record<string, number>>({});
   const snapshotRef = useRef<HTMLDivElement>(null);
+
+  const measureSpan = useCallback((id: string, el: HTMLElement | null) => {
+    if (!el) return;
+    const h = el.getBoundingClientRect().height;
+    setSpanHeights((prev) => (prev[id] === h ? prev : { ...prev, [id]: h }));
+  }, []);
 
   const resizeRef = useRef<{
     id: string;
@@ -107,12 +121,24 @@ export default function RoadmapBoard({
   } | null>(null);
 
   const weekRanges = useMemo(() => getWeekRanges(), []);
-  const allAssignees = useMemo(() => getAllAssignees(items), [items]);
+  // Completed items live only in the History view, never on the board.
+  const activeItems = useMemo(() => items.filter((i) => !i.completedDate), [items]);
+  const allAssignees = useMemo(() => getAllAssignees(activeItems), [activeItems]);
   const filtered = useMemo(
-    () => filterByAssignee(filterByTeam(items, team), assignee),
-    [items, team, assignee]
+    () => filterByAssignee(filterByTeam(activeItems, team), assignee),
+    [activeItems, team, assignee]
   );
   const groups = useMemo(() => buildGroups(filtered), [filtered]);
+
+  // Unique primary assignees among the visible cards — drives the colour key.
+  const ownerKey = useMemo(() => {
+    const names = new Set<string>();
+    for (const it of filtered) {
+      const owner = primaryAssigneeOf(it.primaryAssignees);
+      if (owner) names.add(owner);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [filtered]);
 
   function flash(msg: string, err = false) {
     setToast({ msg, err });
@@ -303,44 +329,50 @@ export default function RoadmapBoard({
     }
   }
 
-  const onResizeMouseDown = useCallback(
-    (e: React.MouseEvent, id: string, currentDuration: number) => {
+  const onResizePointerDown = useCallback(
+    (e: React.PointerEvent, id: string, currentDuration: number) => {
       e.stopPropagation();
       e.preventDefault();
-      const cell = (e.currentTarget as HTMLElement)
-        .closest(".cell") as HTMLElement | null;
-      const cellWidth = cell ? cell.getBoundingClientRect().width : 200;
-      resizeRef.current = { id, startX: e.clientX, startDuration: currentDuration, cellWidth };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 
-      function onMouseMove(me: MouseEvent) {
+      // Measure one column width from the lane-row grid
+      const laneRow = (e.currentTarget as HTMLElement)
+        .closest(".lane-row") as HTMLElement | null;
+      const grid = laneRow ?? (e.currentTarget as HTMLElement).closest(".cell") as HTMLElement | null;
+      // Each of the 3 timeframe columns is 1fr of (total - 180px label)
+      const totalW = grid ? grid.getBoundingClientRect().width : 800;
+      const cellWidth = (totalW - 180) / 3;
+
+      resizeRef.current = { id, startX: e.clientX, startDuration: currentDuration, cellWidth };
+      setResizingId(id);
+      setResizingDuration(currentDuration);
+
+      function onPointerMove(pe: PointerEvent) {
         if (!resizeRef.current) return;
-        const { startX, startDuration, cellWidth, id: rId } = resizeRef.current;
-        const delta = me.clientX - startX;
-        const addedCols = Math.round(delta / cellWidth);
+        const { startX, startDuration, cellWidth } = resizeRef.current;
+        const delta = pe.clientX - startX;
+        const addedCols = Math.floor((delta + cellWidth * 0.25) / cellWidth);
         const newDuration = Math.max(1, Math.min(3, startDuration + addedCols));
-        setItems((prev) =>
-          prev.map((it) =>
-            it.id === rId ? { ...it, durationWeeks: newDuration } : it
-          )
-        );
+        setResizingDuration(newDuration);
       }
 
-      function onMouseUp(me: MouseEvent) {
+      function onPointerUp(pe: PointerEvent) {
         if (!resizeRef.current) return;
         const { startX, startDuration, cellWidth, id: rId } = resizeRef.current;
-        const delta = me.clientX - startX;
-        const addedCols = Math.round(delta / cellWidth);
+        const delta = pe.clientX - startX;
+        const addedCols = Math.floor((delta + cellWidth * 0.25) / cellWidth);
         const newDuration = Math.max(1, Math.min(3, startDuration + addedCols));
         resizeRef.current = null;
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
+        setResizingId(null);
+        document.removeEventListener("pointermove", onPointerMove);
+        document.removeEventListener("pointerup", onPointerUp);
         if (newDuration !== startDuration) {
           patchItem(rId, { durationWeeks: newDuration });
         }
       }
 
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
     },
     []
   );
@@ -363,20 +395,23 @@ export default function RoadmapBoard({
 
   const spanMap = useMemo(() => buildSpanMap(filtered), [filtered]);
 
-  // Simplified card — shows only: name, status pill, size badge, primary assignees
+  // Simplified card — shows only: name, status pill, size badge, primary assignees.
+  // The card is COLOURED by its first primary assignee.
   function renderCard(it: Initiative, colSpan: number, drag: any, dragSnap: any) {
-    const primaryList = it.primaryAssignees.split(",").map((s) => s.trim()).filter(Boolean);
     const pill = STATUS_PILL[it.status] ?? STATUS_PILL["To Do"];
+    const owner = primaryAssigneeOf(it.primaryAssignees);
+    const ac = colorForAssignee(owner);
 
     return (
       <div
         ref={drag?.innerRef}
         {...(drag?.draggableProps ?? {})}
         {...(!readOnly ? (drag?.dragHandleProps ?? {}) : {})}
-        className={`card ${it.spansPods ? "shared" : ""} ${dragSnap?.isDragging ? "dragging" : ""}`}
+        className={`card ${it.spansPods ? "shared" : ""} ${dragSnap?.isDragging ? "dragging" : ""} ${colSpan > 1 ? "spanning" : ""}`}
         style={{
-          borderLeftColor: STATUS_COLORS[it.status] || "#94a3b8",
-          ...(colSpan > 1 ? { gridColumn: `span ${colSpan}`, position: "relative" } : {}),
+          // Colour the card by its primary assignee
+          borderLeftColor: ac.accent,
+          background: ac.bg,
           ...(drag?.draggableProps?.style ?? {}),
         }}
         onClick={() => setSelected(it)}
@@ -397,22 +432,41 @@ export default function RoadmapBoard({
           {it.tShirtSize && (
             <span className="size-badge">{it.tShirtSize}</span>
           )}
+          {it.comments && it.comments.length > 0 && (
+            <span className="comment-badge" title={`${it.comments.length} comment${it.comments.length === 1 ? "" : "s"}`}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {it.comments.length}
+            </span>
+          )}
         </div>
 
-        {primaryList.length > 0 && (
-          <div className="card-assignees">
-            {primaryList.map((name) => (
-              <span key={name} className="assignee-avatar">{name}</span>
-            ))}
-          </div>
-        )}
+        {/* Assignee names removed — cards are colour-coded by owner instead
+           (see the assignee colour key below the board). */}
 
         {!readOnly && (
           <div
             className="resize-handle"
-            onMouseDown={(e) => onResizeMouseDown(e, it.id, it.durationWeeks)}
-            title="Drag right edge to span weeks"
-          />
+            onPointerDown={(e) => onResizePointerDown(e, it.id, it.durationWeeks)}
+            title="Drag to extend across weeks"
+            aria-label="Drag to extend across weeks"
+          >
+            <svg width="10" height="16" viewBox="0 0 10 16" fill="none" aria-hidden="true">
+              <circle cx="2.5" cy="3" r="1.2" fill="currentColor" />
+              <circle cx="7.5" cy="3" r="1.2" fill="currentColor" />
+              <circle cx="2.5" cy="8" r="1.2" fill="currentColor" />
+              <circle cx="7.5" cy="8" r="1.2" fill="currentColor" />
+              <circle cx="2.5" cy="13" r="1.2" fill="currentColor" />
+              <circle cx="7.5" cy="13" r="1.2" fill="currentColor" />
+            </svg>
+          </div>
         )}
       </div>
     );
@@ -425,56 +479,146 @@ export default function RoadmapBoard({
           <div className="area-label">{g.area}</div>
           <div className="area-span" />
         </div>
-        {g.lanes.map((lane) => (
-          <div className="lane-row" key={lane.key}>
-            <div className={`lane-label ${lane.shared ? "shared" : ""}`}>
-              {lane.label}
-            </div>
-            {TIMEFRAMES.map((tf) => {
-              const laneItems = cellItems(filtered, g.area, lane.key, tf);
-              if (readOnly) {
-                return (
-                  <div className="cell" key={tf}>
-                    {laneItems.length === 0 && <div className="empty">—</div>}
-                    {laneItems.map((it) => {
-                      const spanKey = `${g.area}|||${lane.key}|||${tf}|||${it.id}`;
-                      if (spanMap.has(spanKey)) return null;
-                      const colSpan = Math.min(it.durationWeeks, TIMEFRAMES.length - TF_INDEX[tf]);
-                      return <div key={it.id}>{renderCard(it, colSpan, null, {})}</div>;
-                    })}
-                  </div>
-                );
+        {g.lanes.map((lane) => {
+          // For each timeframe column index, compute how much vertical space a
+          // spanning card from an EARLIER column reserves at the top. This is
+          // what pushes other cards down so nothing else has to move.
+          // reservedTop[colIdx] = height (px) to insert as a spacer at the top.
+          const reservedTop: Record<number, number> = {};
+          for (let ci = 0; ci < TIMEFRAMES.length; ci++) {
+            const startTf = TIMEFRAMES[ci];
+            const starters = cellItems(filtered, g.area, lane.key, startTf).filter((it) => {
+              const spanKey = `${g.area}|||${lane.key}|||${startTf}|||${it.id}`;
+              return !spanMap.has(spanKey);
+            });
+            for (const it of starters) {
+              const dur = it.id === resizingId ? resizingDuration : it.durationWeeks;
+              const colSpan = Math.min(dur, TIMEFRAMES.length - ci);
+              if (colSpan <= 1) continue;
+              const h = spanHeights[it.id] ?? 64;
+              // Reserve the band height in the columns it overflows INTO (not its
+              // origin). The flex `gap` then separates it from cards below, matching
+              // how the origin column stacks its own cards under the spanning card.
+              for (let d = 1; d < colSpan; d++) {
+                const overlapIdx = ci + d;
+                reservedTop[overlapIdx] = Math.max(reservedTop[overlapIdx] ?? 0, h);
               }
-              const dId = droppableId(g.area, lane.key, tf);
-              return (
-                <Droppable droppableId={dId} key={tf}>
-                  {(provided, snapshot) => (
-                    <div
-                      className={`cell ${snapshot.isDraggingOver ? "cell-over" : ""}`}
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                    >
-                      {laneItems.length === 0 && !snapshot.isDraggingOver && (
-                        <div className="empty">—</div>
-                      )}
-                      {laneItems.map((it, idx) => {
-                        const spanKey = `${g.area}|||${lane.key}|||${tf}|||${it.id}`;
-                        if (spanMap.has(spanKey)) return null;
-                        const colSpan = Math.min(it.durationWeeks, TIMEFRAMES.length - TF_INDEX[tf]);
+            }
+          }
+
+          return (
+            <div className="lane-row" key={lane.key} style={{ position: "relative" }}>
+              <div className={`lane-label ${lane.shared ? "shared" : ""}`}>
+                {lane.shared && <span className="shared-marker" aria-hidden />}
+                {lane.shared ? (
+                  <span>
+                    Shared
+                    <span className="shared-sub" style={{ display: "block" }}>
+                      Internal + 3rd Party
+                    </span>
+                  </span>
+                ) : (
+                  lane.label
+                )}
+              </div>
+
+              {/* Drop-target cells — always rendered so DnD works */}
+              {TIMEFRAMES.map((tf, colIdx) => {
+                const rawItems = cellItems(filtered, g.area, lane.key, tf).filter((it) => {
+                  const spanKey = `${g.area}|||${lane.key}|||${tf}|||${it.id}`;
+                  return !spanMap.has(spanKey);
+                });
+                // Float multi-week (spanning) cards to the top of their origin cell
+                // so the spanning band aligns with the reserved spacers in the
+                // columns it overflows into.
+                const laneItems = [...rawItems].sort((a, b) => {
+                  const da = (a.id === resizingId ? resizingDuration : a.durationWeeks) > 1 ? 0 : 1;
+                  const db = (b.id === resizingId ? resizingDuration : b.durationWeeks) > 1 ? 0 : 1;
+                  return da - db;
+                });
+                const reserved = reservedTop[colIdx] ?? 0;
+
+                // Spacer to push this column's cards below an incoming spanning band
+                const spacer = reserved > 0 ? (
+                  <div style={{ height: reserved, flexShrink: 0 }} aria-hidden />
+                ) : null;
+
+                // Spanning cards stay IN NORMAL FLOW (so they keep their height
+                // in the origin column and push origin siblings down) but widen to
+                // overflow rightward across the columns they span.
+                // Wrapper 100% = column content-box width (colWidth - 16px padding).
+                // To span N columns we need: N*colWidth + (N-1) border - 16px padding,
+                // which works out to N*100% + 17*(N-1)px.
+                const spanWrapStyle = (colSpan: number, dragging: boolean): React.CSSProperties =>
+                  colSpan > 1
+                    ? {
+                        position: "relative",
+                        width: `calc(${colSpan * 100}% + ${17 * (colSpan - 1)}px)`,
+                        zIndex: dragging ? 9999 : 3,
+                      }
+                    : {};
+
+                if (readOnly) {
+                  return (
+                    <div className="cell" key={tf} style={{ position: "relative" }}>
+                      {spacer}
+                      {laneItems.length === 0 && reserved === 0 && <div className="empty">—</div>}
+                      {laneItems.map((it) => {
+                        const dur = it.id === resizingId ? resizingDuration : it.durationWeeks;
+                        const colSpan = Math.min(dur, TIMEFRAMES.length - colIdx);
                         return (
-                          <Draggable key={it.id} draggableId={it.id} index={idx}>
-                            {(drag, dragSnap) => renderCard(it, colSpan, drag, dragSnap)}
-                          </Draggable>
+                          <div
+                            key={it.id}
+                            ref={colSpan > 1 ? (el) => measureSpan(it.id, el) : undefined}
+                            style={spanWrapStyle(colSpan, false)}
+                          >
+                            {renderCard(it, colSpan, null, {})}
+                          </div>
                         );
                       })}
-                      {provided.placeholder}
                     </div>
-                  )}
-                </Droppable>
-              );
-            })}
-          </div>
-        ))}
+                  );
+                }
+
+                const dId = droppableId(g.area, lane.key, tf);
+                return (
+                  <Droppable droppableId={dId} key={tf}>
+                    {(provided, snapshot) => (
+                      <div
+                        className={`cell ${snapshot.isDraggingOver ? "cell-over" : ""}`}
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        style={{ position: "relative" }}
+                      >
+                        {spacer}
+                        {laneItems.length === 0 && reserved === 0 && !snapshot.isDraggingOver && (
+                          <div className="empty">—</div>
+                        )}
+                        {laneItems.map((it, idx) => {
+                          const dur = it.id === resizingId ? resizingDuration : it.durationWeeks;
+                          const colSpan = Math.min(dur, TIMEFRAMES.length - colIdx);
+                          return (
+                            <Draggable key={it.id} draggableId={it.id} index={idx}>
+                              {(drag, dragSnap) => (
+                                <div
+                                  ref={colSpan > 1 ? (el) => measureSpan(it.id, el) : undefined}
+                                  style={spanWrapStyle(colSpan, dragSnap.isDragging)}
+                                >
+                                  {renderCard(it, colSpan, drag, dragSnap)}
+                                </div>
+                              )}
+                            </Draggable>
+                          );
+                        })}
+                        {provided.placeholder}
+                      </div>
+                    )}
+                  </Droppable>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     ));
   }
@@ -487,106 +631,106 @@ export default function RoadmapBoard({
   return (
     <div className="page">
       {/* ── Top bar ────────────────────────────────────────── */}
-      <div className="topbar">
-        <div className="topbar-left">
-          {/* Stasher brand lockup */}
+      <header className="topbar">
+        {/* Row 1: brand + global nav/actions */}
+        <div className="topbar-row topbar-row-main">
           <div className="brand-lockup">
-            {/* Icon */}
-            <svg width="28" height="24" viewBox="0 0 122 104" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <svg className="brand-icon" width="30" height="26" viewBox="0 0 122 104" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path d="M105.793 26.3962H86.4293C85.253 13.2727 74.1686 2.95496 60.7769 2.95496C47.34 2.95496 36.3009 13.2727 35.1246 26.3962H15.7609C8.97452 26.3962 3.45496 31.9171 3.45496 38.7051V88.529C3.45496 95.3169 8.97452 100.838 15.7609 100.838H105.838C112.625 100.838 118.144 95.3169 118.144 88.529V38.7051C118.144 31.9171 112.579 26.3962 105.793 26.3962ZM49.8283 31.8266C51.1856 36.6234 55.5741 40.1079 60.7769 40.1079C65.9798 40.1079 70.3683 36.5782 71.7256 31.8266H80.8645C79.281 41.194 70.685 49.7016 61.6365 58.6618C61.3651 58.9333 61.0484 59.2048 60.7769 59.5216C60.5055 59.2501 60.1888 58.9785 59.9173 58.6618C50.8689 49.7016 42.2728 41.194 40.6894 31.8266H49.8283ZM54.8502 28.7493C54.8502 25.4911 57.5195 22.8212 60.7769 22.8212C64.0344 22.8212 66.7037 25.4911 66.7037 28.7493C66.7037 32.0076 64.0344 34.6775 60.7769 34.6775C57.5195 34.6775 54.8502 32.0076 54.8502 28.7493ZM56.117 62.5083C57.0218 63.4134 57.9719 64.3184 58.8768 65.2687C59.3744 65.7665 60.0983 66.0833 60.7769 66.0833C61.4556 66.0833 62.1795 65.8118 62.6771 65.2687C63.582 64.3637 64.532 63.4134 65.4369 62.5083C75.3902 52.6431 84.8458 43.2304 86.3388 31.8266H95.2968V95.4527H26.2571V31.8266H35.215C36.6628 43.2756 46.1184 52.6431 56.117 62.5083ZM60.7769 8.4306C71.1827 8.4306 79.8239 16.3047 80.955 26.4414H71.8613C70.7755 21.2825 66.206 17.436 60.7317 17.436C55.2574 17.436 50.6879 21.2825 49.6021 26.4414H40.5084C41.7299 16.3047 50.3712 8.4306 60.7769 8.4306ZM8.8388 88.5742V38.7051C8.8388 34.9038 11.9153 31.8266 15.7156 31.8266H20.828V95.4527H15.7156C11.9605 95.4527 8.8388 92.3755 8.8388 88.5742ZM112.715 88.5742C112.715 92.3755 109.639 95.4527 105.838 95.4527H100.726V31.8266H105.838C109.639 31.8266 112.715 34.9038 112.715 38.7051V88.5742Z" fill="#102A56"/>
             </svg>
-            {/* Wordmark */}
-            <span className="brand-wordmark">Stasher</span>
-            {/* Divider + product label */}
-            <span className="brand-divider" />
-            <span className="brand-product">Roadmap</span>
+            <div className="brand-text">
+              <div className="brand-titles">
+                <span className="brand-wordmark">Stasher</span>
+                <span className="brand-divider" />
+                <span className="brand-product">Roadmap</span>
+                {readOnly && <span className="readonly-badge">View only</span>}
+              </div>
+              <div className="sub">
+                {readOnly
+                  ? "Click any card to view details."
+                  : "Drag cards to move them · drag a card’s right edge to span weeks."}
+              </div>
+            </div>
           </div>
-          <div className="sub">
-            {readOnly
-              ? "Click any card to view details."
-              : "Drag cards to move them. Drag the right edge of a card to span multiple weeks."}
-          </div>
-        </div>
 
-        <div className="controls">
-          {/* Filters */}
-          <div className="filter-group">
-            <span className="filter-label">Team</span>
-            <select
-              className="select"
-              value={team}
-              onChange={(e) => setTeam(e.target.value)}
+          <nav className="topbar-actions">
+            <Link href="/history" className="btn btn-soft">History</Link>
+            <button
+              className="btn icon-btn"
+              onClick={refreshData}
+              disabled={refreshing}
+              title="Refresh data from Airtable"
+              aria-label="Refresh"
             >
-              <option value="All">All teams</option>
-              {TEAM_OPTIONS.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <span className="filter-label">Assignee</span>
-            <select
-              className="select"
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-            >
-              <option value="All">Everyone</option>
-              {allAssignees.map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            className="btn icon-btn"
-            onClick={refreshData}
-            disabled={refreshing}
-            title="Refresh data from Airtable"
-            style={{ alignSelf: "flex-end", marginBottom: 0 }}
-          >
-            <span className={refreshing ? "spin" : ""}>↻</span>
-          </button>
-
-          {!readOnly && (
-            <>
-              <div className="controls-divider" />
-
-              <button
-                className="btn primary"
-                onClick={() => setCreating(true)}
-                style={{ alignSelf: "flex-end" }}
-              >
+              <span className={refreshing ? "spin" : ""}>↻</span>
+            </button>
+            {!readOnly && (
+              <button className="btn primary" onClick={() => setCreating(true)}>
                 + Add initiative
               </button>
+            )}
+          </nav>
+        </div>
 
+        {/* Row 2: filters (left) + Slack actions (right) */}
+        {!readOnly && (
+          <div className="topbar-row topbar-row-tools">
+            <div className="filter-cluster">
+              <div className="filter-group">
+                <span className="filter-label">Team</span>
+                <select className="select" value={team} onChange={(e) => setTeam(e.target.value)}>
+                  <option value="All">All teams</option>
+                  {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="filter-group">
+                <span className="filter-label">Assignee</span>
+                <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                  <option value="All">Everyone</option>
+                  {allAssignees.map((a) => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="slack-actions">
+              <span className="slack-actions-label">Share to Slack:</span>
               <button
-                className="btn"
+                className="btn btn-soft"
                 onClick={sendDraftForApproval}
                 disabled={!!busy}
-                title="Send a draft screenshot to your Slack DMs before sharing"
-                style={{ alignSelf: "flex-end" }}
+                title="Send a draft screenshot to your Slack DMs to approve before posting"
               >
                 Send draft
               </button>
-              <button
-                className="btn"
-                onClick={postToSlack}
-                disabled={!!busy}
-                style={{ alignSelf: "flex-end" }}
-              >
+              <button className="btn slack" onClick={postToSlack} disabled={!!busy}>
                 {busy || "Post to Slack"}
               </button>
-            </>
-          )}
+            </div>
+          </div>
+        )}
 
-          {readOnly && (
-            <span className="readonly-badge" style={{ alignSelf: "flex-end" }}>
-              View only
-            </span>
-          )}
-        </div>
-      </div>
+        {/* Read-only still gets filters */}
+        {readOnly && (
+          <div className="topbar-row topbar-row-tools">
+            <div className="filter-cluster">
+              <div className="filter-group">
+                <span className="filter-label">Team</span>
+                <select className="select" value={team} onChange={(e) => setTeam(e.target.value)}>
+                  <option value="All">All teams</option>
+                  {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="filter-group">
+                <span className="filter-label">Assignee</span>
+                <select className="select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                  <option value="All">Everyone</option>
+                  {allAssignees.map((a) => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
 
       {/* ── Board ──────────────────────────────────────────── */}
       <div className="board-wrap">
@@ -623,22 +767,27 @@ export default function RoadmapBoard({
           {renderBoard()}
         </div>
 
-        {/* Status legend inside the board panel */}
-        <div className="legend">
-          <strong style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginRight: 4 }}>
-            Status:
-          </strong>
-          {Object.entries(STATUS_COLORS).map(([s, c]) => (
-            <div className="item" key={s}>
-              <span className="status-dot" style={{ background: c }} />
-              {s}
-            </div>
-          ))}
-          <div className="item" style={{ marginLeft: 8, borderLeft: "1px solid #e2e8f0", paddingLeft: 12 }}>
-            <span className="status-dot" style={{ background: "#f59e0b" }} />
-            Amber card = spans both pods
+        {/* Assignee colour key — cards are coloured by their primary assignee */}
+        {ownerKey.length > 0 && (
+          <div className="legend">
+            <strong style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginRight: 4 }}>
+              Assignee:
+            </strong>
+            {ownerKey.map((name) => {
+              const c = colorForAssignee(name);
+              return (
+                <div className="item" key={name}>
+                  <span
+                    className="status-dot"
+                    style={{ background: c.accent, width: 11, height: 11, borderRadius: 3 }}
+                  />
+                  {name}
+                </div>
+              );
+            })}
           </div>
-        </div>
+        )}
+
       </div>
 
       {/* ── Modal ──────────────────────────────────────────── */}
@@ -656,6 +805,10 @@ export default function RoadmapBoard({
           extraPods={extraPods}
           onAddArea={(a) => setExtraAreas((prev) => prev.includes(a) ? prev : [...prev, a])}
           onAddPod={(p) => setExtraPods((prev) => prev.includes(p) ? prev : [...prev, p])}
+          onLocalUpdate={(id, patch) => {
+            setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+            setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
+          }}
         />
       )}
 

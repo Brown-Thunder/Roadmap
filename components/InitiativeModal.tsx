@@ -6,12 +6,15 @@ import {
   Comment,
   TEAM_OPTIONS,
   AREA_OPTIONS,
-  POD_OPTIONS,
   STATUS_OPTIONS,
   TIMEFRAMES,
   TSHIRT_OPTIONS,
   LAYER_OPTIONS,
   DEFAULT_TAGS,
+  areaHasPods,
+  podsForArea,
+  AREA_DEFAULT_POD,
+  SPANS_PODS_AREAS,
 } from "@/lib/types";
 
 type Draft = Partial<Initiative>;
@@ -34,7 +37,16 @@ const EMPTY: Draft = {
   tags: [],
   comments: [],
   layers: [],
+  completedDate: "",
 };
+
+// Local YYYY-MM-DD for "today" without UTC drift.
+function todayISO(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 
 const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
   priority:       { bg: "#fef2f2", color: "#b91c1c", border: "#fecaca" },
@@ -134,6 +146,7 @@ export default function InitiativeModal({
   extraPods,
   onAddArea,
   onAddPod,
+  onLocalUpdate,
 }: {
   initiative: Initiative | null;
   onClose: () => void;
@@ -144,6 +157,8 @@ export default function InitiativeModal({
   extraPods?: string[];
   onAddArea?: (a: string) => void;
   onAddPod?: (p: string) => void;
+  // Update the board's in-memory copy without closing the modal.
+  onLocalUpdate?: (id: string, patch: Partial<Initiative>) => void;
 }) {
   const isNew = !initiative;
   const [edit, setEdit] = useState(isNew);
@@ -159,11 +174,45 @@ export default function InitiativeModal({
   const [showAddPod, setShowAddPod] = useState(false);
   const [newPodText, setNewPodText] = useState("");
 
-  const allAreas = [...AREA_OPTIONS, ...(extraAreas ?? [])];
-  const allPods = [...POD_OPTIONS, ...(extraPods ?? [])];
+  const currentArea = form.area || "";
+  // Include the record's current area even if it's a legacy value not in the
+  // standard list, so editing doesn't silently switch it.
+  const allAreas = Array.from(
+    new Set([...AREA_OPTIONS, ...(extraAreas ?? []), ...(currentArea ? [currentArea] : [])])
+  );
+  const showPods = areaHasPods(currentArea);
+  const showSpansPods = SPANS_PODS_AREAS.includes(currentArea);
+  // Pods available for the chosen area, plus any user-added pods, plus the
+  // record's current pod if it's a legacy value.
+  const podChoices = Array.from(
+    new Set([
+      ...podsForArea(currentArea),
+      ...(extraPods ?? []),
+      ...(showPods && form.pod ? [form.pod] : []),
+    ])
+  );
 
   function set<K extends keyof Initiative>(key: K, value: Initiative[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Changing the area cascades pod + spansPods to keep the data consistent.
+  function setArea(area: string) {
+    setForm((f) => {
+      const next: Draft = { ...f, area };
+      if (areaHasPods(area)) {
+        // Keep current pod if still valid, else fall back to the area default.
+        const valid = podsForArea(area);
+        next.pod = valid.includes(f.pod ?? "") ? f.pod : (AREA_DEFAULT_POD[area] ?? valid[0] ?? "");
+      } else {
+        // "Its own pod" areas: clear the pod entirely.
+        next.pod = "";
+      }
+      if (!SPANS_PODS_AREAS.includes(area)) {
+        next.spansPods = false;
+      }
+      return next;
+    });
   }
 
   function toggleTag(tag: string) {
@@ -197,6 +246,28 @@ export default function InitiativeModal({
     }
   }
 
+  // Mark complete: sets the Completed Date to today and Status to Done.
+  // The item then drops off the roadmap and appears in History.
+  async function markComplete() {
+    if (!initiative) return;
+    setSaving(true);
+    const patch = { completedDate: todayISO(), status: "Done" as const };
+    try {
+      const res = await fetch(`/api/initiatives/${initiative.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Update failed");
+      flash("Marked complete ✓");
+      onSaved();
+    } catch (e: any) {
+      flash(e?.message || "Failed to mark complete", true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function remove() {
     if (!initiative) return;
     if (!confirm(`Delete "${initiative.name}"? This cannot be undone.`)) return;
@@ -223,24 +294,33 @@ export default function InitiativeModal({
     };
     const updatedComments = [...(form.comments ?? []), newComment];
     set("comments", updatedComments);
+    setCommentText("");
+    setAddingComment(false);
+
     if (!isNew && initiative) {
       try {
-        await fetch(`/api/initiatives/${initiative.id}`, {
+        const res = await fetch(`/api/initiatives/${initiative.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ comments: updatedComments }),
         });
-      } catch { /* non-fatal */ }
+        if (!res.ok) throw new Error((await res.json()).error || "Failed to save comment");
+        // Keep the board's copy in sync so the comment survives reopening.
+        onLocalUpdate?.(initiative.id, { comments: updatedComments });
+        flash("Comment added ✓");
+      } catch (e: any) {
+        // Roll the optimistic comment back so the UI matches reality.
+        set("comments", form.comments ?? []);
+        flash(e?.message || "Failed to save comment", true);
+      }
     }
-    setCommentText("");
-    setAddingComment(false);
   }
 
   function handleAddArea() {
     const trimmed = newAreaText.trim();
     if (!trimmed) return;
     onAddArea?.(trimmed);
-    set("area", trimmed);
+    setArea(trimmed);
     setNewAreaText("");
     setShowAddArea(false);
   }
@@ -295,6 +375,22 @@ export default function InitiativeModal({
             </div>
             <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
           </div>
+
+          {/* Primary actions — at the top so they're always in reach */}
+          {!readOnly && (
+            <div className="modal-action-bar">
+              {!initiative.completedDate ? (
+                <button className="btn complete" onClick={markComplete} disabled={saving}>
+                  ✓ Mark as complete
+                </button>
+              ) : (
+                <span className="completed-flag">
+                  ✓ Completed {initiative.completedDate}
+                </span>
+              )}
+              <button className="btn primary" onClick={() => setEdit(true)}>Edit</button>
+            </div>
+          )}
 
           {/* Details table */}
           <div className="modal-section">
@@ -423,10 +519,7 @@ export default function InitiativeModal({
             {!readOnly
               ? <button className="btn danger" onClick={remove} disabled={saving}>Delete</button>
               : <span />}
-            <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn" onClick={onClose}>Close</button>
-              {!readOnly && <button className="btn primary" onClick={() => setEdit(true)}>Edit</button>}
-            </div>
+            <button className="btn" onClick={onClose}>Close</button>
           </div>
         </div>
       </div>
@@ -544,13 +637,13 @@ export default function InitiativeModal({
               </div>
             </div>
 
-            <div className="form-row-2">
+            <div className={showPods ? "form-row-2" : ""}>
               {/* Area */}
               <div className="form-field">
                 <FieldLabel>Area</FieldLabel>
                 <div className="select-with-add">
                   <div style={{ position: "relative", flex: 1 }}>
-                    <select value={form.area || ""} onChange={(e) => set("area", e.target.value)} className="styled-select">
+                    <select value={form.area || ""} onChange={(e) => setArea(e.target.value)} className="styled-select">
                       {allAreas.map((o) => <option key={o}>{o}</option>)}
                     </select>
                     <span className="styled-select-arrow">▾</span>
@@ -567,58 +660,67 @@ export default function InitiativeModal({
                       onClick={handleAddArea}>Add</button>
                   </div>
                 )}
-              </div>
-
-              {/* Pod */}
-              <div className="form-field">
-                <FieldLabel>Pod</FieldLabel>
-                <div className="select-with-add">
-                  <div style={{ position: "relative", flex: 1 }}>
-                    <select value={form.pod || ""} onChange={(e) => set("pod", e.target.value)} className="styled-select">
-                      {allPods.map((o) => <option key={o}>{o}</option>)}
-                    </select>
-                    <span className="styled-select-arrow">▾</span>
-                  </div>
-                  <button type="button" className="add-option-btn"
-                    onClick={() => setShowAddPod((v) => !v)} title="Add new pod">+</button>
-                </div>
-                {showAddPod && (
-                  <div className="add-option-row">
-                    <input autoFocus placeholder="New pod name" value={newPodText}
-                      onChange={(e) => setNewPodText(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleAddPod(); }} />
-                    <button className="btn primary" style={{ padding: "7px 12px", fontSize: 13 }}
-                      onClick={handleAddPod}>Add</button>
+                {!showPods && (
+                  <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 6 }}>
+                    {currentArea} is its own pod — no pod needed.
                   </div>
                 )}
               </div>
+
+              {/* Pod — only shown for areas that have pods */}
+              {showPods && (
+                <div className="form-field">
+                  <FieldLabel>Pod</FieldLabel>
+                  <div className="select-with-add">
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <select value={form.pod || ""} onChange={(e) => set("pod", e.target.value)} className="styled-select">
+                        {podChoices.map((o) => <option key={o}>{o}</option>)}
+                      </select>
+                      <span className="styled-select-arrow">▾</span>
+                    </div>
+                    <button type="button" className="add-option-btn"
+                      onClick={() => setShowAddPod((v) => !v)} title="Add new pod">+</button>
+                  </div>
+                  {showAddPod && (
+                    <div className="add-option-row">
+                      <input autoFocus placeholder="New pod name" value={newPodText}
+                        onChange={(e) => setNewPodText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleAddPod(); }} />
+                      <button className="btn primary" style={{ padding: "7px 12px", fontSize: 13 }}
+                        onClick={handleAddPod}>Add</button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Spans both pods toggle */}
-            <div className="form-field">
-              <label className="spans-toggle" style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 14px", borderRadius: 10, cursor: "pointer",
-                border: form.spansPods ? "1.5px solid #f59e0b" : "1.5px solid #e2e8f0",
-                background: form.spansPods ? "#fffbeb" : "#fafbfc",
-                transition: "all 0.15s",
-              }}>
-                <input
-                  type="checkbox"
-                  checked={!!form.spansPods}
-                  onChange={(e) => set("spansPods", e.target.checked)}
-                  style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#f59e0b" }}
-                />
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13.5, color: form.spansPods ? "#92400e" : "#0f172a" }}>
-                    Spans both pods
+            {/* Spans both pods toggle — only for Lockers */}
+            {showSpansPods && (
+              <div className="form-field">
+                <label className="spans-toggle" style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+                  border: form.spansPods ? "1.5px solid #f59e0b" : "1.5px solid #e2e8f0",
+                  background: form.spansPods ? "#fffbeb" : "#fafbfc",
+                  transition: "all 0.15s",
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={!!form.spansPods}
+                    onChange={(e) => set("spansPods", e.target.checked)}
+                    style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#f59e0b" }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, color: form.spansPods ? "#92400e" : "#0f172a" }}>
+                      Spans both pods
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 1 }}>
+                      This initiative covers both Internal and 3rd Party Lockers
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 1 }}>
-                    This initiative covers both Internal and 3rd Party Lockers
-                  </div>
-                </div>
-              </label>
-            </div>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* ── Section 3: People ─────────────────────────────── */}
@@ -732,6 +834,19 @@ export default function InitiativeModal({
                 onChange={(e) => set("notes", e.target.value)}
                 placeholder="Any additional context, blockers, or decisions…"
               />
+            </div>
+
+            <div className="form-field">
+              <FieldLabel hint="set when completed">Completed date</FieldLabel>
+              <input
+                className="form-input"
+                type="date"
+                value={form.completedDate || ""}
+                onChange={(e) => set("completedDate", e.target.value)}
+              />
+              <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 6 }}>
+                Setting a date moves this item to History. Clear it to bring it back to the roadmap.
+              </div>
             </div>
           </div>
         </div>

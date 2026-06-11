@@ -9,7 +9,13 @@ export type Status =
 
 export type TShirtSize = "XS" | "S" | "M" | "L" | "XL";
 
-export type Area = "Lockers" | "Partnerships" | "Engineering" | "Organic Search";
+export type Area =
+  | "Lockers"
+  | "Marketing"
+  | "Finance"
+  | "Engineering"
+  | "Customer Success"
+  | "Product";
 
 export interface Comment {
   id: string;       // timestamp-based local id
@@ -38,15 +44,22 @@ export interface Initiative {
   tags: string[];        // e.g. ["delayed", "priority"]
   comments: Comment[];   // stored as JSON in Airtable long-text field
   layers: string[];      // ["Frontend", "Backend"]
+  completedDate: string; // ISO date "YYYY-MM-DD" or "" if not completed
+}
+
+export function isCompleted(i: Initiative): boolean {
+  return Boolean(i.completedDate);
 }
 
 export const TIMEFRAMES: Timeframe[] = ["This Week", "Next Week", "Future"];
 
 export const AREA_ORDER: string[] = [
   "Lockers",
-  "Partnerships",
+  "Marketing",
+  "Product",
   "Engineering",
-  "Organic Search",
+  "Customer Success",
+  "Finance",
 ];
 
 export const STATUS_COLORS: Record<string, string> = {
@@ -64,12 +77,44 @@ export const TIMEFRAME_ACCENT: Record<Timeframe, string> = {
 };
 
 export const TEAM_OPTIONS = ["Host/Platform", "Customer"];
-export const AREA_OPTIONS = ["Lockers", "Partnerships", "Engineering", "Organic Search"];
+
+export const AREA_OPTIONS = [
+  "Lockers",
+  "Marketing",
+  "Finance",
+  "Engineering",
+  "Customer Success",
+  "Product",
+];
+
+// Pods available per area. An area NOT listed here is "its own pod" — the pod
+// picker is hidden and the Pod field is left empty in Airtable.
+export const AREA_PODS: Record<string, string[]> = {
+  Lockers: ["Internal Lockers", "3rd Party Lockers"],
+  Marketing: ["Organic Search"],
+};
+
+// Default pod to pre-select when an area is chosen (if it has pods).
+export const AREA_DEFAULT_POD: Record<string, string> = {
+  Lockers: "3rd Party Lockers",
+  Marketing: "Organic Search",
+};
+
+// Only these areas can have an initiative that spans multiple pods.
+export const SPANS_PODS_AREAS = ["Lockers"];
+
+// Helpers
+export function areaHasPods(area: string): boolean {
+  return (AREA_PODS[area]?.length ?? 0) > 0;
+}
+export function podsForArea(area: string): string[] {
+  return AREA_PODS[area] ?? [];
+}
+
+// Full flat list kept for any legacy callers.
 export const POD_OPTIONS = [
   "Internal Lockers",
   "3rd Party Lockers",
-  "Partnerships",
-  "Engineering",
   "Organic Search",
 ];
 export const STATUS_OPTIONS: Status[] = [
@@ -93,3 +138,49 @@ export const DEFAULT_TAGS = [
   "discovery",
   "dependencies",
 ];
+
+// ─── Assignee colours ──────────────────────────────────────────────────────────
+// Curated, visually distinct palette. Each entry is { bg, fg, border, accent }.
+// accent is the strong colour used for the card's left border + legend dot.
+export interface AssigneeColor {
+  bg: string;
+  fg: string;
+  border: string;
+  accent: string;
+}
+
+export const ASSIGNEE_PALETTE: AssigneeColor[] = [
+  { bg: "#eef2ff", fg: "#3730a3", border: "#c7d2fe", accent: "#6366f1" }, // indigo
+  { bg: "#ecfdf5", fg: "#065f46", border: "#a7f3d0", accent: "#10b981" }, // emerald
+  { bg: "#fff7ed", fg: "#9a3412", border: "#fed7aa", accent: "#f97316" }, // orange
+  { bg: "#fdf2f8", fg: "#9d174d", border: "#fbcfe8", accent: "#ec4899" }, // pink
+  { bg: "#eff6ff", fg: "#1e40af", border: "#bfdbfe", accent: "#3b82f6" }, // blue
+  { bg: "#f5f3ff", fg: "#5b21b6", border: "#ddd6fe", accent: "#8b5cf6" }, // violet
+  { bg: "#fefce8", fg: "#854d0e", border: "#fef08a", accent: "#eab308" }, // amber
+  { bg: "#f0fdfa", fg: "#115e59", border: "#99f6e4", accent: "#14b8a6" }, // teal
+  { bg: "#fef2f2", fg: "#991b1b", border: "#fecaca", accent: "#ef4444" }, // red
+  { bg: "#f7fee7", fg: "#3f6212", border: "#d9f99d", accent: "#84cc16" }, // lime
+  { bg: "#f0f9ff", fg: "#075985", border: "#bae6fd", accent: "#0ea5ce" }, // sky
+  { bg: "#fdf4ff", fg: "#86198f", border: "#f5d0fe", accent: "#d946ef" }, // fuchsia
+];
+
+const UNASSIGNED_COLOR: AssigneeColor = {
+  bg: "#f8fafc", fg: "#475569", border: "#e2e8f0", accent: "#94a3b8",
+};
+
+// Stable string hash → palette index, so a given name always maps to the same colour.
+export function colorForAssignee(name: string): AssigneeColor {
+  const key = (name || "").trim().toLowerCase();
+  if (!key) return UNASSIGNED_COLOR;
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  }
+  const idx = Math.abs(hash) % ASSIGNEE_PALETTE.length;
+  return ASSIGNEE_PALETTE[idx];
+}
+
+// The first primary assignee drives a card's colour.
+export function primaryAssigneeOf(primaryAssignees: string): string {
+  return (primaryAssignees || "").split(",").map((s) => s.trim()).filter(Boolean)[0] ?? "";
+}

@@ -37,29 +37,41 @@ select, button, input, textarea { font: inherit; }
 
 /* ─── Top bar ────────────────────────────────────────────────── */
 .topbar {
+  margin-bottom: 20px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.topbar-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 20px;
   padding: 14px 18px;
-  background: var(--panel);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--line);
 }
-.topbar-left { display: flex; flex-direction: column; gap: 4px; }
-.topbar .sub { color: var(--muted); font-size: 12px; margin-top: 1px; }
+/* Row 2 sits on a faint tinted strip to separate tools from the brand row */
+.topbar-row-tools {
+  border-top: 1px solid var(--line);
+  background: #fafbfc;
+  padding: 12px 18px;
+}
+.topbar .sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
 
 /* ─── Brand lockup ───────────────────────────────────────────── */
 .brand-lockup {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
+  min-width: 0;
 }
+.brand-icon { flex-shrink: 0; }
+.brand-text { display: flex; flex-direction: column; min-width: 0; }
+.brand-titles { display: flex; align-items: center; gap: 9px; }
 .brand-wordmark {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 800;
   color: #102A56;
   letter-spacing: -0.03em;
@@ -74,26 +86,29 @@ select, button, input, textarea { font: inherit; }
   border-radius: 1px;
 }
 .brand-product {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: #00A969;
   letter-spacing: -0.01em;
   line-height: 1;
 }
 
-.controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Topbar action group (right side of row 1) */
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* Filter group — label + select stacked */
-.filter-group { display: flex; flex-direction: column; gap: 3px; }
+/* Filters cluster (left of row 2) */
+.filter-cluster { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
 .filter-group .filter-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--muted); padding-left: 2px;
 }
 
-/* Divider between filter controls and action buttons */
-.controls-divider {
-  width: 1px; height: 28px; background: var(--line-strong);
-  margin: 0 4px; flex-shrink: 0;
+/* Slack actions (right of row 2) */
+.slack-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.slack-actions-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #94a3b8; margin-right: 2px;
 }
 
 /* ─── Buttons ────────────────────────────────────────────────── */
@@ -116,8 +131,17 @@ select, button, input, textarea { font: inherit; }
 .btn.ghost:hover { background: #ede9fe20; }
 .btn.danger { color: #b91c1c; }
 .btn.danger:hover { background: #fef2f2; border-color: #fecaca; }
+.btn.complete { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.btn.complete:hover { background: #dcfce7; border-color: #86efac; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.icon-btn { padding: 7px 10px; font-size: 15px; line-height: 1; }
+/* Soft neutral button — quieter than primary, clearer than plain */
+.btn.btn-soft { background: #f1f5f9; border-color: #e2e8f0; color: var(--ink-2); }
+.btn.btn-soft:hover { background: #e2e8f0; border-color: #cbd5e1; }
+/* Slack-branded post button */
+.btn.slack { background: #4a154b; border-color: #4a154b; color: #fff; }
+.btn.slack:hover { background: #3d1140; border-color: #3d1140; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { display: inline-block; animation: spin 0.75s linear infinite; }
@@ -142,10 +166,10 @@ select, button, input, textarea { font: inherit; }
 
 /* Read-only badge */
 .readonly-badge {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--muted);
   background: #f1f5f9; border: 1px solid var(--line);
-  border-radius: 999px; padding: 4px 10px;
+  border-radius: 999px; padding: 3px 9px; margin-left: 4px;
 }
 
 /* ─── Board container ────────────────────────────────────────── */
@@ -243,12 +267,23 @@ select, button, input, textarea { font: inherit; }
   border-right: 1px solid var(--line);
   display: flex;
   align-items: center;
+  gap: 7px;
   line-height: 1.3;
 }
+/* Shared lane: keep it visually consistent with other lanes. The only
+   distinction is a small amber marker dot + lighter label, so it reads as
+   "a lane" rather than a loud highlighted band. */
 .lane-label.shared {
-  background: var(--shared);
-  border-left: 3px solid var(--shared-line);
-  color: #92400e;
+  color: var(--ink-2);
+  background: var(--lane-bg);
+}
+.lane-label.shared .shared-marker {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--shared-line);
+  flex-shrink: 0;
+}
+.lane-label.shared .shared-sub {
+  font-size: 10.5px; font-weight: 500; color: #94a3b8;
 }
 
 /* Cells */
@@ -260,6 +295,8 @@ select, button, input, textarea { font: inherit; }
   flex-direction: column;
   gap: 6px;
   transition: background 0.1s;
+  /* Allow spanning cards to overflow into adjacent columns */
+  overflow: visible;
 }
 .cell:last-child { border-right: none; }
 .cell-over { background: #eef2ff; }
@@ -283,7 +320,6 @@ select, button, input, textarea { font: inherit; }
   transform: translateY(-1px);
   border-color: #b8c4d0;
 }
-.card.shared { background: #fffdf3; }
 .card.dragging {
   box-shadow: 0 12px 32px rgba(15,23,42,0.2);
   transform: rotate(1deg) scale(1.01);
@@ -315,6 +351,12 @@ select, button, input, textarea { font: inherit; }
   padding: 2px 6px; font-size: 11px; font-weight: 800;
   border: 1px solid #ddd6fe; letter-spacing: 0.02em;
 }
+/* Comment count indicator on cards */
+.comment-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  color: #64748b; font-size: 11px; font-weight: 700;
+}
+.comment-badge svg { display: block; }
 .card-assignees {
   display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px;
 }
@@ -326,14 +368,28 @@ select, button, input, textarea { font: inherit; }
   white-space: nowrap;
 }
 
-/* Resize handle */
+/* Resize handle — a grip-dots icon pinned to the right edge.
+   No shaded background; it just fades in on hover. */
 .resize-handle {
-  position: absolute; right: 0; top: 0; bottom: 0; width: 8px;
-  cursor: col-resize; border-radius: 0 8px 8px 0; opacity: 0;
-  transition: opacity 0.15s;
-  background: linear-gradient(to right, transparent, rgba(79,70,229,0.3));
+  position: absolute;
+  right: 2px; top: 0; bottom: 0;
+  width: 16px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(79,70,229,0.45);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  touch-action: none; /* required for pointer capture on touch */
 }
 .card:hover .resize-handle { opacity: 1; }
+.resize-handle:hover { color: rgba(79,70,229,0.85); }
+
+/* Spanning card: dashed right border signals it continues beyond the column */
+.card.spanning {
+  border-right: 2px dashed rgba(79,70,229,0.35);
+}
 
 /* ─── Status colour helpers (used on pills + left borders) ───── */
 .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
@@ -347,6 +403,58 @@ select, button, input, textarea { font: inherit; }
   border: 1px solid var(--line);
 }
 .legend .item { display: flex; align-items: center; gap: 6px; }
+
+/* ─── History timeline ───────────────────────────────────────── */
+.history-group { padding: 4px 24px 8px; }
+.history-month {
+  font-size: 12px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.07em; color: #94a3b8;
+  padding: 14px 0 10px; position: sticky; top: 0;
+  background: var(--panel); z-index: 1;
+}
+.history-timeline {
+  position: relative;
+  padding-left: 22px;
+  /* vertical timeline line */
+  border-left: 2px solid var(--line);
+  margin-left: 5px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.history-item { position: relative; }
+.history-dot {
+  position: absolute;
+  left: -29px; top: 14px;
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.history-card {
+  border: 1px solid var(--line);
+  border-left: 4px solid #94a3b8;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.history-card-top {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.history-name { font-weight: 700; font-size: 14px; color: var(--ink); }
+.history-meta {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12.5px; color: #64748b; margin-bottom: 8px;
+}
+.history-completed {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-top: 8px; border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+}
+.history-completed-label { color: #15803d; font-weight: 600; }
+
+@media (max-width: 480px) {
+  .history-group { padding: 4px 14px 8px; }
+}
 
 /* ─── Toast ──────────────────────────────────────────────────── */
 .toast {
@@ -408,6 +516,20 @@ select, button, input, textarea { font: inherit; }
   transition: background 0.1s, color 0.1s;
 }
 .modal-close-x:hover { background: #f1f5f9; color: var(--ink); }
+
+/* Top action bar in the card detail modal */
+.modal-action-bar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--line);
+  background: #fafbfc;
+}
+.modal-action-bar .completed-flag {
+  margin-right: auto;
+  font-size: 13px; font-weight: 600; color: #15803d;
+  background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: 999px; padding: 4px 12px;
+}
 
 /* Status badge strip in view modal */
 .modal-badges {
@@ -663,20 +785,13 @@ a.link:hover { text-decoration: underline; }
 @media (max-width: 768px) {
   .page { padding: 12px 12px 32px; }
 
-  /* Topbar stacks brand on top, controls below */
-  .topbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-    padding: 12px 14px;
-  }
-  .controls {
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .controls-divider { display: none; }
-  /* Filters side-by-side, buttons full-width below */
+  /* Topbar rows stack their two halves */
+  .topbar-row { gap: 12px; padding: 12px 14px; }
+  .topbar-row-tools { padding: 10px 14px; }
+  .topbar-actions { gap: 6px; }
+  .filter-cluster { flex: 1; }
   .filter-group { flex: 1; min-width: 120px; }
+  .slack-actions { flex: 1; justify-content: flex-end; }
   .select { min-width: 0; width: 100%; }
 
   /* Board scrolls horizontally — keeps column widths readable */
@@ -697,6 +812,7 @@ a.link:hover { text-decoration: underline; }
   .card-name { font-size: 12px; }
   .status-pill { font-size: 10px; padding: 2px 7px; }
   .size-badge { font-size: 10px; }
+  .comment-badge { font-size: 10px; }
   .assignee-avatar { font-size: 10px; padding: 2px 6px; }
 
   /* Legend wraps tightly */
@@ -707,21 +823,21 @@ a.link:hover { text-decoration: underline; }
 @media (max-width: 480px) {
   .page { padding: 10px 10px 28px; }
 
-  .topbar { padding: 10px 12px; border-radius: 10px; }
-  .brand-wordmark { font-size: 15px; }
-  .brand-product { font-size: 13px; }
+  .topbar-row { padding: 10px 12px; }
+  .topbar-row-tools { padding: 10px 12px; }
+  .brand-wordmark { font-size: 16px; }
+  .brand-product { font-size: 14px; }
   .topbar .sub { display: none; } /* hide hint on very small screens */
 
-  /* Action buttons go full-width */
-  .controls { flex-direction: column; align-items: stretch; }
-  .filter-group { flex: unset; }
-  /* Keep filters in a row */
-  .controls > .filter-group { flex: 1; }
-  .controls-row-filters {
-    display: flex; gap: 6px; width: 100%;
-  }
-  .btn { width: 100%; text-align: center; justify-content: center; }
-  .btn.icon-btn { width: auto; }
+  /* Brand row: wordmark left, actions wrap below it */
+  .topbar-actions { width: 100%; }
+  .topbar-actions .btn { flex: 1; text-align: center; justify-content: center; }
+  .topbar-actions .btn.icon-btn { flex: 0 0 auto; }
+
+  /* Filters stack full width, then Slack actions below */
+  .filter-cluster { width: 100%; }
+  .slack-actions { width: 100%; justify-content: flex-start; }
+  .slack-actions .btn { flex: 1; text-align: center; justify-content: center; }
 
   /* Board min-width so columns stay scannable */
   .board { min-width: 580px; }

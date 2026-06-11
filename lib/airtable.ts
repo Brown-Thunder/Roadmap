@@ -52,6 +52,7 @@ function toInitiative(rec: any): Initiative {
       catch { return []; }
     })(),
     layers: Array.isArray(f["Layers"]) ? f["Layers"] : [],
+    completedDate: f["Completed Date"] || "",
   };
 }
 
@@ -79,6 +80,7 @@ function toFields(input: Partial<Initiative>): Record<string, any> {
     if (input.tags !== undefined) f["Tags"] = input.tags;
     if (input.comments !== undefined) f["Comments"] = JSON.stringify(input.comments);
     if (input.layers !== undefined) f["Layers"] = input.layers;
+    if (input.completedDate !== undefined) f["Completed Date"] = input.completedDate || null;
   }
   return f;
 }

@@ -91,6 +91,16 @@ export function filterByAssignee(
   });
 }
 
+// Active (not completed) items only — for the roadmap board.
+export function activeInitiatives(initiatives: Initiative[]): Initiative[] {
+  return initiatives.filter((i) => !i.completedDate);
+}
+
+// Completed items only — for the History timeline.
+export function completedInitiatives(initiatives: Initiative[]): Initiative[] {
+  return initiatives.filter((i) => Boolean(i.completedDate));
+}
+
 export function getAllAssignees(initiatives: Initiative[]): string[] {
   const names = new Set<string>();
   for (const i of initiatives) {
