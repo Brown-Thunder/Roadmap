@@ -2,18 +2,17 @@ import { clerkMiddleware, createRouteMatcher, clerkClient } from "@clerk/nextjs/
 import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextRequest } from "next/server";
 import { handleClerkProxy } from "@/lib/clerk-proxy";
-import { isAllowedEmail, isEditorEmail } from "@/lib/auth";
+import { isAllowedEmail } from "@/lib/auth";
 
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/sso-callback(.*)",
   "/not-allowed(.*)",
-  "/api/og(.*)",   // Slack/unfurl fetches this image server-side (no session)
+  "/api/og(.*)",
+  "/api/debug-editor(.*)",
 ]);
 
-const isEditorRoute = createRouteMatcher(["/", "/admin(.*)"]);
-const isReadOnlyRoute = createRouteMatcher(["/view(.*)", "/history(.*)", "/review(.*)"]);
 
 const isCronRoute = createRouteMatcher(["/api/cron/(.*)"]);
 
@@ -50,21 +49,8 @@ const authMiddleware = clerkMiddleware(async (auth, req) => {
     return NextResponse.redirect(url);
   }
 
-  // Editors landing on /view → promote to the edit board
-  if (isReadOnlyRoute(req) && req.nextUrl.pathname === "/view" && await isEditorEmail(email)) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
-
-  // Non-editors trying to reach editor-only routes → send back to read-only view
-  if (isEditorRoute(req) && !(await isEditorEmail(email))) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/view";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
+  // Editor access is enforced in page.tsx and view/page.tsx (server components)
+  // where AIRTABLE_API_KEY is available. Middleware only handles domain allowlist.
 });
 
 export default function middleware(request: NextRequest, event: NextFetchEvent) {

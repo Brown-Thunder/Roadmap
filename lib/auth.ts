@@ -18,8 +18,6 @@ export function isAllowedEmail(email: string | null | undefined): boolean {
 }
 
 const EDITORS_TABLE = "tblddFtP1kUnxXWMp";
-const EMAIL_FIELD = "fldxGeRy4fYKBjgj3";
-const NAME_FIELD = "fldsLMhgAmUksTV7g";
 
 export interface EditorRecord {
   id: string;
@@ -47,8 +45,8 @@ export async function getEditors(): Promise<EditorRecord[]> {
   const json = await res.json();
   return (json.records ?? []).map((r: any) => ({
     id: r.id,
-    email: (r.fields[EMAIL_FIELD] ?? "").trim().toLowerCase(),
-    name: r.fields[NAME_FIELD] ?? "",
+    email: (r.fields["Email"] ?? "").trim().toLowerCase(),
+    name: r.fields["Name"] ?? "",
   }));
 }
 
@@ -57,7 +55,7 @@ export async function addEditor(email: string, name = ""): Promise<EditorRecord[
     method: "POST",
     headers: airtableHeaders(),
     body: JSON.stringify({
-      records: [{ fields: { [EMAIL_FIELD]: email.trim().toLowerCase(), [NAME_FIELD]: name } }],
+      records: [{ fields: { "Email": email.trim().toLowerCase(), "Name": name } }],
     }),
   });
   return getEditors();
