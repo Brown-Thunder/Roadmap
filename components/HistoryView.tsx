@@ -9,6 +9,7 @@ import {
   AssigneeColor,
 } from "@/lib/types";
 import InitiativeModal from "./InitiativeModal";
+import UserMenu from "./UserMenu";
 
 const STATUS_PILL: Record<string, { bg: string; fg: string; border: string }> = {
   "In Flight": { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" },
@@ -179,6 +180,7 @@ export default function HistoryView({ initial }: { initial: Initiative[] }) {
             </div>
           </div>
           <nav className="topbar-actions">
+            <UserMenu />
             <Link href="/" className="btn btn-soft">← Back to priorities</Link>
           </nav>
         </div>
