@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 // Multi-select assignee picker: a checklist dropdown with chips, type-to-filter,
 // and the ability to add a brand-new name (which persists to the People table).
-// Value in/out is the comma-separated string the initiative model already uses.
+// Value in/out is the comma-separated string the initiative model already uses
 export default function AssigneePicker({
   value,
   onChange,
