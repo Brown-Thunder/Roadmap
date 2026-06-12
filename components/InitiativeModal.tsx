@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Initiative,
   Comment,
@@ -9,6 +9,7 @@ import {
   STATUS_OPTIONS,
   TIMEFRAMES,
   TSHIRT_OPTIONS,
+  PRIORITY_OPTIONS,
   LAYER_OPTIONS,
   DEFAULT_TAGS,
   areaHasPods,
@@ -16,6 +17,8 @@ import {
   AREA_DEFAULT_POD,
   SPANS_PODS_AREAS,
 } from "@/lib/types";
+import type { GithubIssue } from "@/lib/github";
+import AssigneePicker from "./AssigneePicker";
 
 type Draft = Partial<Initiative>;
 
@@ -38,6 +41,7 @@ const EMPTY: Draft = {
   comments: [],
   layers: [],
   completedDate: "",
+  priority: "",
 };
 
 // Local YYYY-MM-DD for "today" without UTC drift.
@@ -46,6 +50,13 @@ function todayISO(): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// "2026-06-08" -> "Mon 8 Jun 2026" for the Week Plan 2 section headers.
+function formatWeekPlanDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
 const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -72,6 +83,14 @@ function tagStyle(tag: string) {
 }
 
 // ── Small helpers ──────────────────────────────────────────────────────────────
+
+function GithubMark() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
 
 function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
@@ -174,6 +193,114 @@ export default function InitiativeModal({
   const [showAddPod, setShowAddPod] = useState(false);
   const [newPodText, setNewPodText] = useState("");
 
+  // People directory — drives the assignee dropdowns.
+  const [people, setPeople] = useState<string[]>([]);
+
+  async function loadPeople() {
+    try {
+      const res = await fetch("/api/people");
+      const data = await res.json();
+      if (data.ok) setPeople(data.people.map((p: { name: string }) => p.name));
+    } catch { /* non-fatal — picker just shows current selection */ }
+  }
+  useEffect(() => { loadPeople(); }, []);
+
+  // Persist a brand-new name to the People table, then refresh the option list.
+  async function addPerson(name: string) {
+    try {
+      const res = await fetch("/api/people", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        setPeople((prev) =>
+          prev.some((p) => p.toLowerCase() === name.toLowerCase()) ? prev : [...prev, name].sort((a, b) => a.localeCompare(b))
+        );
+      }
+    } catch { /* still selected locally even if the write fails */ }
+  }
+
+  // GitHub Project (v2) issue picker — only for new initiatives.
+  const [ghIssues, setGhIssues] = useState<GithubIssue[]>([]);
+  const [ghConfigured, setGhConfigured] = useState(false);
+  const [ghLoading, setGhLoading] = useState(false);
+  const [ghError, setGhError] = useState<string | null>(null);
+  const [ghOpen, setGhOpen] = useState(false);
+  const [ghQuery, setGhQuery] = useState("");
+  const [ghLinkedUrl, setGhLinkedUrl] = useState<string>("");
+
+  // Fetch issues for the picker, scoped to the currently-selected team so it
+  // mirrors the Hosts (Supply) / Customers (Demand) board views.
+  useEffect(() => {
+    if (!isNew) return;
+    let cancelled = false;
+    setGhLoading(true);
+    setGhError(null);
+    const team = form.team || "All";
+    fetch(`/api/github/issues?team=${encodeURIComponent(team)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setGhConfigured(Boolean(data.configured));
+        if (data.ok && data.configured) setGhIssues(data.issues || []);
+        else if (!data.ok) setGhError(data.error || "Failed to load GitHub issues");
+      })
+      .catch((e) => { if (!cancelled) setGhError(e?.message || "Failed to load GitHub issues"); })
+      .finally(() => { if (!cancelled) setGhLoading(false); });
+    return () => { cancelled = true; };
+  }, [isNew, form.team]);
+
+  // Filter by the search query, then group into sections by "Week Plan 2" date
+  // (newest first; the server already sorts this way). Undated issues collect
+  // into a "Backlog" section shown last.
+  const ghSections = (() => {
+    const q = ghQuery.trim().toLowerCase();
+    const base = ghIssues
+      .filter((i) => !i.isPR)
+      .filter((i) =>
+        !q ||
+        i.title.toLowerCase().includes(q) ||
+        String(i.number).includes(q) ||
+        i.repository.toLowerCase().includes(q) ||
+        i.assignees.some((a) => a.toLowerCase().includes(q))
+      )
+      .slice(0, 200);
+
+    const sections: { key: string; label: string; backlog: boolean; items: GithubIssue[] }[] = [];
+    for (const issue of base) {
+      const key = issue.weekPlan2 || "__backlog__";
+      let section = sections.find((s) => s.key === key);
+      if (!section) {
+        section = {
+          key,
+          label: issue.weekPlan2 ? formatWeekPlanDate(issue.weekPlan2) : "Backlog",
+          backlog: !issue.weekPlan2,
+          items: [],
+        };
+        sections.push(section);
+      }
+      section.items.push(issue);
+    }
+    return sections;
+  })();
+  const ghTotal = ghSections.reduce((n, s) => n + s.items.length, 0);
+
+  function pickIssue(issue: GithubIssue) {
+    // Prefer display names resolved from GitHub logins; fall back to the raw
+    // logins for anyone not in the People directory.
+    const names = issue.mappedAssignees ?? issue.assignees;
+    setForm((f) => ({
+      ...f,
+      name: issue.title,
+      link: issue.url,
+      primaryAssignees: names.join(", "),
+    }));
+    setGhLinkedUrl(issue.url);
+    setGhOpen(false);
+    setGhQuery("");
+  }
+
   const currentArea = form.area || "";
   // Include the record's current area even if it's a legacy value not in the
   // standard list, so editing doesn't silently switch it.
@@ -220,9 +347,6 @@ export default function InitiativeModal({
     set("tags", current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]);
   }
 
-  function formatAssignees(value: string) {
-    return value.split(",").map((s) => s.trim()).filter(Boolean).join(", ");
-  }
 
   async function save() {
     if (!form.name?.trim()) { flash("Name is required", true); return; }
@@ -399,6 +523,17 @@ export default function InitiativeModal({
                 <div className="card-info-key">Timeframe</div>
                 <div className="card-info-val">{initiative.timeframe}</div>
               </div>
+              {initiative.priority && (
+                <div className="card-info-row">
+                  <div className="card-info-key">Priority</div>
+                  <div className="card-info-val">
+                    <span className={`priority-chip ${initiative.priority.toLowerCase()}`}>
+                      {initiative.priority === "High" && <span className="priority-bang" aria-hidden>!</span>}
+                      {initiative.priority}
+                    </span>
+                  </div>
+                </div>
+              )}
               {primaryList.length > 0 && (
                 <div className="card-info-row">
                   <div className="card-info-key">Primary assignee(s)</div>
@@ -556,6 +691,102 @@ export default function InitiativeModal({
         {/* Scrollable form body */}
         <div className="edit-form-body">
 
+          {/* ── GitHub issue prefill (new initiatives only) ───── */}
+          {/* Render as soon as we're loading OR confirmed configured, so the
+             picker appears immediately with a loading state instead of popping
+             in only after the (slow) first board crawl resolves. */}
+          {isNew && (ghConfigured || (ghLoading && ghError === null)) && (
+            <div className="gh-picker">
+              {ghLinkedUrl ? (
+                <div className="gh-linked">
+                  <span className="gh-linked-icon" aria-hidden>
+                    <GithubMark />
+                  </span>
+                  <span className="gh-linked-text">
+                    Prefilled from <a href={ghLinkedUrl} target="_blank" rel="noreferrer">GitHub issue</a>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    onClick={() => { setGhLinkedUrl(""); setGhOpen(true); }}
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : !ghOpen ? (
+                <button
+                  type="button"
+                  className="gh-trigger"
+                  onClick={() => setGhOpen(true)}
+                  disabled={ghLoading}
+                >
+                  <GithubMark />
+                  <span>Start from a Stashboard V2 issue</span>
+                  <span className="gh-trigger-hint">
+                    {ghLoading
+                      ? "loading issues…"
+                      : form.team === "Customer" ? "Customers view"
+                      : form.team === "Host/Platform" ? "Hosts view"
+                      : "all issues"}
+                  </span>
+                </button>
+              ) : (
+                <div className="gh-search-panel">
+                  <div className="gh-search-head">
+                    <GithubMark />
+                    <input
+                      autoFocus
+                      className="gh-search-input"
+                      placeholder="Search issues by title, #number, repo or assignee…"
+                      value={ghQuery}
+                      onChange={(e) => setGhQuery(e.target.value)}
+                    />
+                    <button type="button" className="btn-link" onClick={() => { setGhOpen(false); setGhQuery(""); }}>
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="gh-results">
+                    {ghLoading && <div className="gh-empty">Loading issues…</div>}
+                    {ghError && <div className="gh-empty gh-error">{ghError}</div>}
+                    {!ghLoading && !ghError && ghTotal === 0 && (
+                      <div className="gh-empty">No matching issues.</div>
+                    )}
+                    {ghSections.map((section) => (
+                      <div key={section.key} className="gh-section">
+                        <div className={`gh-section-head ${section.backlog ? "backlog" : ""}`}>
+                          {section.backlog ? (
+                            <span>Backlog</span>
+                          ) : (
+                            <span><span className="gh-section-cal" aria-hidden>🗓</span> Week of {section.label}</span>
+                          )}
+                          <span className="gh-section-count">{section.items.length}</span>
+                        </div>
+                        {section.items.map((issue) => (
+                          <button
+                            key={issue.id}
+                            type="button"
+                            className="gh-result"
+                            onClick={() => pickIssue(issue)}
+                          >
+                            <span className={`gh-state gh-state-${issue.state.toLowerCase()}`} title={issue.state} />
+                            <span className="gh-result-main">
+                              <span className="gh-result-title">{issue.title}</span>
+                              <span className="gh-result-meta">
+                                {issue.repository} #{issue.number}
+                                {issue.status && <> · {issue.status}</>}
+                                {issue.assignees.length > 0 && <> · {issue.assignees.join(", ")}</>}
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Section 1: Basics ─────────────────────────────── */}
           <div className="form-section">
             <SectionHeading icon="📋" title="Basic details" />
@@ -610,6 +841,26 @@ export default function InitiativeModal({
                     { value: 3, label: "3 weeks" },
                   ]}
                 />
+              </div>
+            </div>
+
+            <div className="form-field">
+              <FieldLabel>Priority</FieldLabel>
+              <div className="priority-picker">
+                {PRIORITY_OPTIONS.map((p) => {
+                  const active = form.priority === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`priority-option ${p.toLowerCase()} ${active ? "active" : ""}`}
+                      onClick={() => set("priority", active ? "" : (p as any))}
+                    >
+                      {p === "High" && <span className="priority-bang" aria-hidden>!</span>}
+                      {p}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -729,38 +980,24 @@ export default function InitiativeModal({
 
             <div className="form-row-2">
               <div className="form-field">
-                <FieldLabel hint="comma-separated">Primary assignee(s)</FieldLabel>
-                <input
-                  className="form-input"
+                <FieldLabel hint="pick or type to add">Primary assignee(s)</FieldLabel>
+                <AssigneePicker
                   value={form.primaryAssignees || ""}
-                  onChange={(e) => set("primaryAssignees", e.target.value)}
-                  onBlur={(e) => set("primaryAssignees", formatAssignees(e.target.value))}
-                  placeholder="e.g. Alex, Jamie"
+                  onChange={(v) => set("primaryAssignees", v)}
+                  options={people}
+                  onAddPerson={addPerson}
+                  placeholder="Select people…"
                 />
-                {form.primaryAssignees && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
-                    {formatAssignees(form.primaryAssignees).split(", ").filter(Boolean).map((n) => (
-                      <span key={n} className="assignee-chip primary">{n}</span>
-                    ))}
-                  </div>
-                )}
               </div>
               <div className="form-field">
-                <FieldLabel hint="comma-separated">Support assignee(s)</FieldLabel>
-                <input
-                  className="form-input"
+                <FieldLabel hint="pick or type to add">Support assignee(s)</FieldLabel>
+                <AssigneePicker
                   value={form.supportAssignees || ""}
-                  onChange={(e) => set("supportAssignees", e.target.value)}
-                  onBlur={(e) => set("supportAssignees", formatAssignees(e.target.value))}
-                  placeholder="e.g. Sam, Jordan"
+                  onChange={(v) => set("supportAssignees", v)}
+                  options={people}
+                  onAddPerson={addPerson}
+                  placeholder="Select people…"
                 />
-                {form.supportAssignees && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
-                    {formatAssignees(form.supportAssignees).split(", ").filter(Boolean).map((n) => (
-                      <span key={n} className="assignee-chip support">{n}</span>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           </div>

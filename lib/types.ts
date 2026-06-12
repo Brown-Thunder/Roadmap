@@ -45,7 +45,11 @@ export interface Initiative {
   comments: Comment[];   // stored as JSON in Airtable long-text field
   layers: string[];      // ["Frontend", "Backend"]
   completedDate: string; // ISO date "YYYY-MM-DD" or "" if not completed
+  priority: Priority | ""; // "High" | "Medium" | "Low" | ""
 }
+
+export type Priority = "High" | "Medium" | "Low";
+export const PRIORITY_OPTIONS: Priority[] = ["High", "Medium", "Low"];
 
 export function isCompleted(i: Initiative): boolean {
   return Boolean(i.completedDate);
@@ -167,11 +171,39 @@ export const ASSIGNEE_PALETTE: AssigneeColor[] = [
 const UNASSIGNED_COLOR: AssigneeColor = {
   bg: "#f8fafc", fg: "#475569", border: "#e2e8f0", accent: "#94a3b8",
 };
+export const UNASSIGNED_ASSIGNEE_COLOR = UNASSIGNED_COLOR;
 
-// Stable string hash → palette index, so a given name always maps to the same colour.
-export function colorForAssignee(name: string): AssigneeColor {
+// Named colours assignable to a person in the Airtable People table. Each maps
+// to a full {bg, fg, border, accent} swatch. These are the distinct, curated
+// colours a card adopts from its primary assignee.
+export const NAMED_ASSIGNEE_COLORS: Record<string, AssigneeColor> = {
+  Indigo:  { bg: "#eef2ff", fg: "#3730a3", border: "#c7d2fe", accent: "#6366f1" },
+  Emerald: { bg: "#ecfdf5", fg: "#065f46", border: "#a7f3d0", accent: "#10b981" },
+  Orange:  { bg: "#fff7ed", fg: "#9a3412", border: "#fed7aa", accent: "#f97316" },
+  Pink:    { bg: "#fdf2f8", fg: "#9d174d", border: "#fbcfe8", accent: "#ec4899" },
+  Blue:    { bg: "#eff6ff", fg: "#1e40af", border: "#bfdbfe", accent: "#3b82f6" },
+  Violet:  { bg: "#f5f3ff", fg: "#5b21b6", border: "#ddd6fe", accent: "#8b5cf6" },
+  Amber:   { bg: "#fefce8", fg: "#854d0e", border: "#fef08a", accent: "#eab308" },
+  Teal:    { bg: "#f0fdfa", fg: "#115e59", border: "#99f6e4", accent: "#14b8a6" },
+  Red:     { bg: "#fef2f2", fg: "#991b1b", border: "#fecaca", accent: "#ef4444" },
+  Lime:    { bg: "#f7fee7", fg: "#3f6212", border: "#d9f99d", accent: "#84cc16" },
+  Sky:     { bg: "#f0f9ff", fg: "#075985", border: "#bae6fd", accent: "#0ea5ce" },
+  Fuchsia: { bg: "#fdf4ff", fg: "#86198f", border: "#f5d0fe", accent: "#d946ef" },
+};
+
+// Resolve a person's colour. If an explicit map is provided (from the People
+// table's assigned colours), that wins; otherwise fall back to a stable hash so
+// anyone not yet in the directory still gets a consistent colour.
+export function colorForAssignee(
+  name: string,
+  overrides?: Record<string, AssigneeColor>
+): AssigneeColor {
   const key = (name || "").trim().toLowerCase();
   if (!key) return UNASSIGNED_COLOR;
+  if (overrides) {
+    const hit = overrides[key];
+    if (hit) return hit;
+  }
   let hash = 0;
   for (let i = 0; i < key.length; i++) {
     hash = (hash * 31 + key.charCodeAt(i)) | 0;

@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     const dm = await openDm(approver);
 
     const filename = `roadmap-${new Date().toISOString().slice(0, 10)}.png`;
-    await uploadImage(dm, filename, bytes, comment, "Team Roadmap (draft)");
+    await uploadImage(dm, filename, bytes, comment, "Weekly Priorities (draft)");
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

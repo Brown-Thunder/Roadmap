@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     }
 
     const filename = `roadmap-${new Date().toISOString().slice(0, 10)}.png`;
-    await uploadImage(channel, filename, bytes, comment, "Team Roadmap");
+    await uploadImage(channel, filename, bytes, comment, "Weekly Priorities");
 
     return NextResponse.json({ ok: true, draft });
   } catch (e: any) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toPng } from "html-to-image";
 import {
@@ -17,6 +17,7 @@ import {
   Timeframe,
   colorForAssignee,
   primaryAssigneeOf,
+  AssigneeColor,
 } from "@/lib/types";
 import {
   buildGroups,
@@ -105,6 +106,8 @@ export default function RoadmapBoard({
   // Measured heights of spanning cards, keyed by id — used to reserve space
   // in the columns a spanning card overlaps so other cards drop below it.
   const [spanHeights, setSpanHeights] = useState<Record<string, number>>({});
+  // Per-person colours assigned in the People table (name lowercased → swatch).
+  const [colourMap, setColourMap] = useState<Record<string, AssigneeColor>>({});
   const snapshotRef = useRef<HTMLDivElement>(null);
 
   const measureSpan = useCallback((id: string, el: HTMLElement | null) => {
@@ -119,6 +122,22 @@ export default function RoadmapBoard({
     startDuration: number;
     cellWidth: number;
   } | null>(null);
+
+  // Warm the GitHub board cache in the background on mount so the issue picker
+  // is ready by the time the user opens "Add initiative" (the first crawl is ~9s).
+  useEffect(() => {
+    if (readOnly) return;
+    fetch("/api/github/issues").catch(() => {});
+  }, [readOnly]);
+
+  // Load per-person colours so cards/legend reflect each assignee's distinct colour.
+  const loadColours = useCallback(() => {
+    fetch("/api/people", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => { if (data.ok && data.colours) setColourMap(data.colours); })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadColours(); }, [loadColours]);
 
   const weekRanges = useMemo(() => getWeekRanges(), []);
   // Completed items live only in the History view, never on the board.
@@ -196,8 +215,9 @@ export default function RoadmapBoard({
 
   async function refreshData() {
     setRefreshing(true);
+    loadColours(); // also pull any new/changed assignee colours
     try {
-      const res = await fetch("/api/initiatives");
+      const res = await fetch("/api/initiatives", { cache: "no-store" });
       const data = await res.json();
       if (data.ok) setItems(data.initiatives);
       else throw new Error(data.error);
@@ -400,14 +420,14 @@ export default function RoadmapBoard({
   function renderCard(it: Initiative, colSpan: number, drag: any, dragSnap: any) {
     const pill = STATUS_PILL[it.status] ?? STATUS_PILL["To Do"];
     const owner = primaryAssigneeOf(it.primaryAssignees);
-    const ac = colorForAssignee(owner);
+    const ac = colorForAssignee(owner, colourMap);
 
     return (
       <div
         ref={drag?.innerRef}
         {...(drag?.draggableProps ?? {})}
         {...(!readOnly ? (drag?.dragHandleProps ?? {}) : {})}
-        className={`card ${it.spansPods ? "shared" : ""} ${dragSnap?.isDragging ? "dragging" : ""} ${colSpan > 1 ? "spanning" : ""}`}
+        className={`card ${it.spansPods ? "shared" : ""} ${dragSnap?.isDragging ? "dragging" : ""} ${colSpan > 1 ? "spanning" : ""} ${it.priority === "High" ? "has-priority-flag" : ""}`}
         style={{
           // Colour the card by its primary assignee
           borderLeftColor: ac.accent,
@@ -416,6 +436,10 @@ export default function RoadmapBoard({
         }}
         onClick={() => setSelected(it)}
       >
+        {it.priority === "High" && (
+          <span className="priority-flag" title="High priority" aria-label="High priority">!</span>
+        )}
+
         <div className="card-name">{it.name}</div>
 
         <div className="card-status-row">
@@ -642,7 +666,7 @@ export default function RoadmapBoard({
               <div className="brand-titles">
                 <span className="brand-wordmark">Stasher</span>
                 <span className="brand-divider" />
-                <span className="brand-product">Roadmap</span>
+                <span className="brand-product">Weekly Priorities</span>
                 {readOnly && <span className="readonly-badge">View only</span>}
               </div>
               <div className="sub">
@@ -741,7 +765,7 @@ export default function RoadmapBoard({
               <path d="M105.793 26.3962H86.4293C85.253 13.2727 74.1686 2.95496 60.7769 2.95496C47.34 2.95496 36.3009 13.2727 35.1246 26.3962H15.7609C8.97452 26.3962 3.45496 31.9171 3.45496 38.7051V88.529C3.45496 95.3169 8.97452 100.838 15.7609 100.838H105.838C112.625 100.838 118.144 95.3169 118.144 88.529V38.7051C118.144 31.9171 112.579 26.3962 105.793 26.3962ZM49.8283 31.8266C51.1856 36.6234 55.5741 40.1079 60.7769 40.1079C65.9798 40.1079 70.3683 36.5782 71.7256 31.8266H80.8645C79.281 41.194 70.685 49.7016 61.6365 58.6618C61.3651 58.9333 61.0484 59.2048 60.7769 59.5216C60.5055 59.2501 60.1888 58.9785 59.9173 58.6618C50.8689 49.7016 42.2728 41.194 40.6894 31.8266H49.8283ZM54.8502 28.7493C54.8502 25.4911 57.5195 22.8212 60.7769 22.8212C64.0344 22.8212 66.7037 25.4911 66.7037 28.7493C66.7037 32.0076 64.0344 34.6775 60.7769 34.6775C57.5195 34.6775 54.8502 32.0076 54.8502 28.7493ZM56.117 62.5083C57.0218 63.4134 57.9719 64.3184 58.8768 65.2687C59.3744 65.7665 60.0983 66.0833 60.7769 66.0833C61.4556 66.0833 62.1795 65.8118 62.6771 65.2687C63.582 64.3637 64.532 63.4134 65.4369 62.5083C75.3902 52.6431 84.8458 43.2304 86.3388 31.8266H95.2968V95.4527H26.2571V31.8266H35.215C36.6628 43.2756 46.1184 52.6431 56.117 62.5083ZM60.7769 8.4306C71.1827 8.4306 79.8239 16.3047 80.955 26.4414H71.8613C70.7755 21.2825 66.206 17.436 60.7317 17.436C55.2574 17.436 50.6879 21.2825 49.6021 26.4414H40.5084C41.7299 16.3047 50.3712 8.4306 60.7769 8.4306ZM8.8388 88.5742V38.7051C8.8388 34.9038 11.9153 31.8266 15.7156 31.8266H20.828V95.4527H15.7156C11.9605 95.4527 8.8388 92.3755 8.8388 88.5742ZM112.715 88.5742C112.715 92.3755 109.639 95.4527 105.838 95.4527H100.726V31.8266H105.838C109.639 31.8266 112.715 34.9038 112.715 38.7051V88.5742Z" fill="#102A56"/>
             </svg>
             <span className="board-title">
-              Roadmap{team !== "All" && <span style={{ fontWeight: 500, color: "#94a3b8" }}> · {team}</span>}
+              Weekly Priorities{team !== "All" && <span style={{ fontWeight: 500, color: "#94a3b8" }}> · {team}</span>}
             </span>
           </div>
           <span className="board-date">
@@ -774,7 +798,7 @@ export default function RoadmapBoard({
               Assignee:
             </strong>
             {ownerKey.map((name) => {
-              const c = colorForAssignee(name);
+              const c = colorForAssignee(name, colourMap);
               return (
                 <div className="item" key={name}>
                   <span

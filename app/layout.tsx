@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Team Roadmap",
+  title: "Weekly Priorities",
   description: "Current and future priorities across pods.",
 };
 

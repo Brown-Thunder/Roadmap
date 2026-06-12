@@ -31,7 +31,7 @@ export function buildSummary(
 
   const teamLabel = team && team !== "All" ? ` (${team})` : "";
   const lines: string[] = [];
-  lines.push(`*:world_map: Team Roadmap${teamLabel} — week of ${date}*`);
+  lines.push(`*:world_map: Weekly Priorities${teamLabel} — week of ${date}*`);
   if (thisWeek.length)
     lines.push(`*This week:* ${thisWeek.join(", ")}`);
   if (nextWeek.length) lines.push(`*Next week:* ${nextWeek.join(", ")}`);
