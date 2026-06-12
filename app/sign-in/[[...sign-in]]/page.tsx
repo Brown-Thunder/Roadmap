@@ -7,10 +7,11 @@ export default function SignInPage() {
 
   async function handleGoogleSignIn() {
     if (!isLoaded) return;
+    const origin = window.location.origin;
     await signIn.authenticateWithRedirect({
       strategy: "oauth_google",
-      redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/",
+      redirectUrl: `${origin}/sso-callback`,
+      redirectUrlComplete: `${origin}/view`,
     });
   }
 

@@ -91,8 +91,8 @@ export type RoadmapBoardHandle = {
 
 const RoadmapBoard = forwardRef<
   RoadmapBoardHandle,
-  { initial: Initiative[]; readOnly?: boolean }
->(function RoadmapBoard({ initial, readOnly = false }, ref) {
+  { initial: Initiative[]; readOnly?: boolean; canManageEditors?: boolean }
+>(function RoadmapBoard({ initial, readOnly = false, canManageEditors = false }, ref) {
   const [items, setItems] = useState<Initiative[]>(initial);
   const [team, setTeam] = useState<string>("All");
   const [assignee, setAssignee] = useState<string>("All");
@@ -702,6 +702,9 @@ const RoadmapBoard = forwardRef<
 
           <nav className="topbar-actions">
             <Link href="/history" className="btn btn-soft">History</Link>
+            {canManageEditors && (
+              <Link href="/admin" className="btn btn-soft">Manage editors</Link>
+            )}
             <button
               className="btn icon-btn"
               onClick={refreshData}

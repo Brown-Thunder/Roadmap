@@ -2,7 +2,7 @@ import { clerkMiddleware, createRouteMatcher, clerkClient } from "@clerk/nextjs/
 import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextRequest } from "next/server";
 import { handleClerkProxy } from "@/lib/clerk-proxy";
-import { isAllowedEmail } from "@/lib/auth";
+import { isAllowedEmail, isEditorEmail } from "@/lib/auth";
 
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
@@ -11,6 +11,9 @@ const isPublicRoute = createRouteMatcher([
   "/not-allowed(.*)",
   "/api/og(.*)",   // Slack/unfurl fetches this image server-side (no session)
 ]);
+
+const isEditorRoute = createRouteMatcher(["/", "/admin(.*)"]);
+const isReadOnlyRoute = createRouteMatcher(["/view(.*)", "/history(.*)", "/review(.*)"]);
 
 const isCronRoute = createRouteMatcher(["/api/cron/(.*)"]);
 
@@ -43,6 +46,22 @@ const authMiddleware = clerkMiddleware(async (auth, req) => {
   if (!isAllowedEmail(email)) {
     const url = req.nextUrl.clone();
     url.pathname = "/not-allowed";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // Editors landing on /view → promote to the edit board
+  if (isReadOnlyRoute(req) && req.nextUrl.pathname === "/view" && await isEditorEmail(email)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // Non-editors trying to reach editor-only routes → send back to read-only view
+  if (isEditorRoute(req) && !(await isEditorEmail(email))) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/view";
     url.search = "";
     return NextResponse.redirect(url);
   }
