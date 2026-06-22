@@ -180,6 +180,11 @@ export default function InitiativeModal({
   onAddPod,
   onLocalUpdate,
   allInitiatives = [],
+  ghIssues = [],
+  ghConfigured = false,
+  ghLoading = false,
+  ghError = null,
+  onRefreshGhIssues,
 }: {
   initiative: Initiative | null;
   onClose: () => void;
@@ -192,6 +197,11 @@ export default function InitiativeModal({
   onAddPod?: (p: string) => void;
   onLocalUpdate?: (id: string, patch: Partial<Initiative>) => void;
   allInitiatives?: Initiative[];
+  ghIssues?: GithubIssue[];
+  ghConfigured?: boolean;
+  ghLoading?: boolean;
+  ghError?: string | null;
+  onRefreshGhIssues?: () => void;
 }) {
   const isNew = !initiative;
   const [edit, setEdit] = useState(isNew);
@@ -236,43 +246,44 @@ export default function InitiativeModal({
     } catch { /* still selected locally even if the write fails */ }
   }
 
-  // GitHub Project (v2) issue picker — only for new initiatives.
-  const [ghIssues, setGhIssues] = useState<GithubIssue[]>([]);
-  const [ghConfigured, setGhConfigured] = useState(false);
-  const [ghLoading, setGhLoading] = useState(false);
-  const [ghError, setGhError] = useState<string | null>(null);
+  // GitHub issue picker UI state — issues themselves come in as props.
   const [ghOpen, setGhOpen] = useState(false);
   const [ghQuery, setGhQuery] = useState("");
   const [ghLinkedUrl, setGhLinkedUrl] = useState<string>("");
 
-  // Fetch issues for the picker, scoped to the currently-selected team so it
-  // mirrors the Hosts (Supply) / Customers (Demand) board views.
-  useEffect(() => {
-    if (!isNew) return;
-    let cancelled = false;
-    setGhLoading(true);
-    setGhError(null);
-    const team = form.team || "All";
-    fetch(`/api/github/issues?team=${encodeURIComponent(team)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        setGhConfigured(Boolean(data.configured));
-        if (data.ok && data.configured) setGhIssues(data.issues || []);
-        else if (!data.ok) setGhError(data.error || "Failed to load GitHub issues");
-      })
-      .catch((e) => { if (!cancelled) setGhError(e?.message || "Failed to load GitHub issues"); })
-      .finally(() => { if (!cancelled) setGhLoading(false); });
-    return () => { cancelled = true; };
-  }, [isNew, form.team]);
+  // Filter the full issue list by team client-side, replicating the saved-view
+  // logic from lib/github.ts so no extra server call is needed on team change.
+  const TEAM_VIEWS: Record<"Host/Platform" | "Customer", {
+    squad: string; repos: string[]; excludeStatuses: string[];
+  }> = {
+    "Host/Platform": {
+      squad: "Supply",
+      repos: ["web", "api", "web-admin-dashboard", "web-hosts", "react-email-templates"],
+      excludeStatuses: ["Done", "Released"],
+    },
+    Customer: {
+      squad: "Demand",
+      repos: ["web", "api", "dummy"],
+      excludeStatuses: ["Discovery In Progress", "Discovery Backlog", "Discovery Done", "Known Issues"],
+    },
+  };
 
-  // Filter by the search query, then group into sections by "Week Plan 2" date
-  // (newest first; the server already sorts this way). Undated issues collect
-  // into a "Backlog" section shown last.
   const ghSections = (() => {
+    const selectedTeam = form.team as "Host/Platform" | "Customer" | string;
+    const view = (selectedTeam === "Host/Platform" || selectedTeam === "Customer")
+      ? TEAM_VIEWS[selectedTeam] : null;
+
     const q = ghQuery.trim().toLowerCase();
     const base = ghIssues
       .filter((i) => !i.isPR)
+      .filter((i) => {
+        if (!view) return true;
+        const repo = i.repository.split("/").pop() || i.repository;
+        if (view.squad && i.squad !== view.squad) return false;
+        if (view.repos.length && !view.repos.includes(repo)) return false;
+        if (view.excludeStatuses.includes(i.status)) return false;
+        return true;
+      })
       .filter((i) =>
         !q ||
         i.title.toLowerCase().includes(q) ||
@@ -798,22 +809,36 @@ export default function InitiativeModal({
                   </button>
                 </div>
               ) : !ghOpen ? (
-                <button
-                  type="button"
-                  className="gh-trigger"
-                  onClick={() => setGhOpen(true)}
-                  disabled={ghLoading}
-                >
-                  <GithubMark />
-                  <span>Start from a Stashboard V2 issue</span>
-                  <span className="gh-trigger-hint">
-                    {ghLoading
-                      ? "loading issues…"
-                      : form.team === "Customer" ? "Customers view"
-                      : form.team === "Host/Platform" ? "Hosts view"
-                      : "all issues"}
-                  </span>
-                </button>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button
+                    type="button"
+                    className="gh-trigger"
+                    onClick={() => setGhOpen(true)}
+                    disabled={ghLoading}
+                    style={{ flex: 1 }}
+                  >
+                    <GithubMark />
+                    <span>Start from a Stashboard V2 issue</span>
+                    <span className="gh-trigger-hint">
+                      {ghLoading
+                        ? "loading…"
+                        : form.team === "Customer" ? "Customers view"
+                        : form.team === "Host/Platform" ? "Hosts view"
+                        : "all issues"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn icon-btn"
+                    onClick={() => onRefreshGhIssues?.()}
+                    disabled={ghLoading}
+                    title="Refresh GitHub issues"
+                    aria-label="Refresh GitHub issues"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <span className={ghLoading ? "spin" : ""}>↻</span>
+                  </button>
+                </div>
               ) : (
                 <div className="gh-search-panel">
                   <div className="gh-search-head">

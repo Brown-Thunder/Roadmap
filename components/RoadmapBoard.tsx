@@ -30,6 +30,7 @@ import {
 } from "@/lib/roadmap";
 import InitiativeModal from "./InitiativeModal";
 import UserMenu from "./UserMenu";
+import type { GithubIssue } from "@/lib/github";
 
 function getMondayOf(d: Date): Date {
   const day = d.getDay();
@@ -232,6 +233,12 @@ const RoadmapBoard = forwardRef<
   const [colourMap, setColourMap] = useState<Record<string, AssigneeColor>>({});
   const snapshotRef = useRef<HTMLDivElement>(null);
 
+  // GitHub issues — fetched once on mount, refreshed manually.
+  const [ghIssues, setGhIssues] = useState<GithubIssue[]>([]);
+  const [ghConfigured, setGhConfigured] = useState(false);
+  const [ghLoading, setGhLoading] = useState(false);
+  const [ghError, setGhError] = useState<string | null>(null);
+
   const measureSpan = useCallback((id: string, el: HTMLElement | null) => {
     if (!el) return;
     const h = el.getBoundingClientRect().height;
@@ -245,12 +252,24 @@ const RoadmapBoard = forwardRef<
     cellWidth: number;
   } | null>(null);
 
-  // Warm the GitHub board cache in the background on mount so the issue picker
-  // is ready by the time the user opens "Add initiative" (the first crawl is ~9s).
-  useEffect(() => {
+  // Fetch GitHub issues once on mount (or on manual refresh).
+  const loadGhIssues = useCallback((bust = false) => {
     if (readOnly) return;
-    fetch("/api/github/issues").catch(() => {});
+    setGhLoading(true);
+    setGhError(null);
+    const url = bust ? "/api/github/issues?refresh" : "/api/github/issues";
+    fetch(url)
+      .then((r) => r.json())
+      .then((data) => {
+        setGhConfigured(Boolean(data.configured));
+        if (data.ok && data.configured) setGhIssues(data.issues || []);
+        else if (!data.ok) setGhError(data.error || "Failed to load GitHub issues");
+      })
+      .catch((e) => setGhError(e?.message || "Failed to load GitHub issues"))
+      .finally(() => setGhLoading(false));
   }, [readOnly]);
+
+  useEffect(() => { loadGhIssues(); }, [loadGhIssues]);
 
   // Load per-person colours so cards/legend reflect each assignee's distinct colour.
   const loadColours = useCallback(() => {
@@ -1153,6 +1172,11 @@ const RoadmapBoard = forwardRef<
             setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
           }}
           allInitiatives={activeItems}
+          ghIssues={ghIssues}
+          ghConfigured={ghConfigured}
+          ghLoading={ghLoading}
+          ghError={ghError}
+          onRefreshGhIssues={() => loadGhIssues(true)}
         />
       )}
 

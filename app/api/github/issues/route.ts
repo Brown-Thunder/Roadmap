@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listProjectIssues, githubConfigured, TeamFilter } from "@/lib/github";
+import { listProjectIssues, invalidateGithubCache, githubConfigured } from "@/lib/github";
 import { githubLoginMap } from "@/lib/people";
 
 export const dynamic = "force-dynamic";
 
+// GET /api/github/issues         — serve cached full issue list (all teams)
+// GET /api/github/issues?refresh — bust cache then re-crawl
 export async function GET(req: NextRequest) {
   if (!githubConfigured()) {
-    // Not an error — the picker just stays hidden if GitHub isn't set up.
     return NextResponse.json({ ok: true, configured: false, issues: [] });
   }
-  const teamParam = req.nextUrl.searchParams.get("team") || "All";
-  const team: TeamFilter =
-    teamParam === "Host/Platform" || teamParam === "Customer" ? teamParam : "All";
+  if (req.nextUrl.searchParams.has("refresh")) {
+    invalidateGithubCache();
+  }
   try {
-    const [issues, loginMap] = await Promise.all([listProjectIssues(team), githubLoginMap()]);
-    // Resolve GitHub logins to roadmap display names where we have a mapping;
-    // unknown logins fall through unchanged so the PM can still see who it is.
+    const [issues, loginMap] = await Promise.all([listProjectIssues("All"), githubLoginMap()]);
     const enriched = issues.map((i) => ({
       ...i,
       mappedAssignees: i.assignees.map((login) => loginMap[login.toLowerCase()] || login),
