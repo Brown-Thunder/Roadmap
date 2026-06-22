@@ -18,6 +18,8 @@ import {
   colorForAssignee,
   primaryAssigneeOf,
   AssigneeColor,
+  assignCardCodes,
+  DEP_TYPE_LABELS,
 } from "@/lib/types";
 import {
   buildGroups,
@@ -84,6 +86,105 @@ const STATUS_PILL: Record<string, { bg: string; fg: string; border: string }> = 
   Done:        { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0" },
 };
 
+// ── Dependency arrow overlay ─────────────────────────────────────────────────
+
+function DepArrows({
+  items,
+  codeMap,
+  blockedByMap,
+  cardRefs,
+  boardRef,
+  hoveredId,
+  showAll,
+  traceChain,
+}: {
+  items: Initiative[];
+  codeMap: Map<string, string>;
+  blockedByMap: Map<string, string[]>;
+  cardRefs: Record<string, HTMLElement | null>;
+  boardRef: HTMLDivElement | null;
+  hoveredId: string | null;
+  showAll: boolean;
+  traceChain: Set<string>;
+}) {
+  if (!boardRef) return null;
+  const boardRect = boardRef.getBoundingClientRect();
+
+  const arrows: React.ReactElement[] = [];
+
+  for (const it of items) {
+    const deps = blockedByMap.get(it.id) ?? [];
+    if (deps.length === 0) continue;
+
+    for (const blockerId of deps) {
+      // In show-all mode: draw everything. In hover mode: draw if either end is in chain.
+      if (!showAll && !(traceChain.has(it.id) && traceChain.has(blockerId))) continue;
+
+      const fromEl = cardRefs[blockerId];
+      const toEl = cardRefs[it.id];
+      if (!fromEl || !toEl) continue;
+
+      const fromRect = fromEl.getBoundingClientRect();
+      const toRect = toEl.getBoundingClientRect();
+
+      // Arrow from right edge of blocker → left edge of blocked
+      const x1 = fromRect.right - boardRect.left;
+      const y1 = fromRect.top - boardRect.top + fromRect.height / 2;
+      const x2 = toRect.left - boardRect.left;
+      const y2 = toRect.top - boardRect.top + toRect.height / 2;
+
+      // Bezier curve handle length
+      const dx = Math.abs(x2 - x1) * 0.4 + 30;
+      const path = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+      const highlighted = hoveredId !== null && traceChain.has(it.id) && traceChain.has(blockerId);
+      const color = highlighted ? "#6366f1" : "#94a3b8";
+      const opacity = showAll && hoveredId !== null && !highlighted ? 0.2 : 0.7;
+
+      arrows.push(
+        <g key={`${blockerId}->${it.id}`}>
+          <path
+            d={path}
+            fill="none"
+            stroke={color}
+            strokeWidth={highlighted ? 2 : 1.5}
+            strokeDasharray={highlighted ? undefined : "4 3"}
+            opacity={opacity}
+          />
+          {/* Arrowhead at destination */}
+          <polygon
+            points={`${x2},${y2} ${x2 - 7},${y2 - 4} ${x2 - 7},${y2 + 4}`}
+            fill={color}
+            opacity={opacity}
+          />
+        </g>
+      );
+    }
+  }
+
+  if (arrows.length === 0) return null;
+
+  return (
+    <svg
+      className="dep-overlay"
+      style={{
+        position: "absolute",
+        top: 0, left: 0,
+        width: boardRect.width,
+        height: boardRect.height,
+        pointerEvents: "none",
+        zIndex: 10,
+      }}
+    >
+      <defs>
+        <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <polygon points="0 0, 7 3.5, 0 7" fill="#6366f1" />
+        </marker>
+      </defs>
+      {arrows}
+    </svg>
+  );
+}
+
 export type RoadmapBoardHandle = {
   capturePng: () => Promise<string>;
   getTeam: () => string;
@@ -103,6 +204,24 @@ const RoadmapBoard = forwardRef<
   const [refreshing, setRefreshing] = useState(false);
   const [extraAreas, setExtraAreas] = useState<string[]>([]);
   const [extraPods, setExtraPods] = useState<string[]>([]);
+  // Slack preview modal state
+  const [slackDropdownOpen, setSlackDropdownOpen] = useState(false);
+  const [slackPreview, setSlackPreview] = useState<{
+    image: string;
+    message: string;
+    team: string;
+  } | null>(null);
+  const [editedMessage, setEditedMessage] = useState("");
+  // During snapshot capture we temporarily override the team filter to match
+  // what was selected in the Slack dropdown, without changing the visible UI.
+  const [snapshotTeam, setSnapshotTeam] = useState<string | null>(null);
+  const slackDropdownRef = useRef<HTMLDivElement>(null);
+  // Dependency trace state
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [showAllLinks, setShowAllLinks] = useState(false);
+  // Card element refs for drawing dep arrows (id → DOM element)
+  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
+  const boardRef = useRef<HTMLDivElement>(null);
   // Live resize preview: while dragging the handle, track current visual duration
   const [resizingId, setResizingId] = useState<string | null>(null);
   const [resizingDuration, setResizingDuration] = useState(1);
@@ -142,15 +261,85 @@ const RoadmapBoard = forwardRef<
   }, []);
   useEffect(() => { loadColours(); }, [loadColours]);
 
+  // Close Slack dropdown when clicking outside it
+  useEffect(() => {
+    if (!slackDropdownOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (slackDropdownRef.current && !slackDropdownRef.current.contains(e.target as Node)) {
+        setSlackDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [slackDropdownOpen]);
+
   const weekRanges = useMemo(() => getWeekRanges(), []);
   // Completed items live only in the History view, never on the board.
   const activeItems = useMemo(() => items.filter((i) => !i.completedDate), [items]);
   const allAssignees = useMemo(() => getAllAssignees(activeItems), [activeItems]);
   const filtered = useMemo(
-    () => filterByAssignee(filterByTeam(activeItems, team), assignee),
-    [activeItems, team, assignee]
+    () => filterByAssignee(filterByTeam(activeItems, snapshotTeam ?? team), assignee),
+    [activeItems, team, snapshotTeam, assignee]
   );
   const groups = useMemo(() => buildGroups(filtered), [filtered]);
+
+  // Build a stable id→cardCode map from the full items list.
+  const codeMap = useMemo(() => {
+    const codes = assignCardCodes(items);
+    return codes;
+  }, [items]);
+
+  // id → DepLinks going out from this initiative
+  const depLinksMap = useMemo(() => {
+    const m = new Map<string, typeof items[0]["depLinks"]>();
+    for (const it of items) m.set(it.id, it.depLinks ?? []);
+    return m;
+  }, [items]);
+
+  // id → list of {type, fromId} — what points AT this initiative (reverse links)
+  const reverseDepMap = useMemo(() => {
+    const m = new Map<string, { type: typeof items[0]["depLinks"][0]["type"]; fromId: string }[]>();
+    for (const it of items) {
+      for (const dep of (it.depLinks ?? [])) {
+        if (!m.has(dep.id)) m.set(dep.id, []);
+        m.get(dep.id)!.push({ type: dep.type, fromId: it.id });
+      }
+    }
+    return m;
+  }, [items]);
+
+  // Keep blockedByMap as a flat id[] for arrow-drawing / trace compat
+  const blockedByMap = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const it of items) m.set(it.id, (it.depLinks ?? []).map((d) => d.id));
+    return m;
+  }, [items]);
+
+  const blocksMap = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const it of items) {
+      for (const dep of (it.depLinks ?? [])) {
+        if (!m.has(dep.id)) m.set(dep.id, []);
+        m.get(dep.id)!.push(it.id);
+      }
+    }
+    return m;
+  }, [items]);
+
+  // BFS from a hovered card — collect full transitive chain (both directions).
+  const traceChain = useMemo((): Set<string> => {
+    if (!hoveredId) return new Set();
+    const visited = new Set<string>();
+    const queue = [hoveredId];
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      for (const dep of (blockedByMap.get(id) ?? [])) queue.push(dep);
+      for (const dep of (blocksMap.get(id) ?? [])) queue.push(dep);
+    }
+    return visited;
+  }, [hoveredId, blockedByMap, blocksMap]);
 
   // Unique primary assignees among the visible cards — drives the colour key.
   const ownerKey = useMemo(() => {
@@ -184,41 +373,54 @@ const RoadmapBoard = forwardRef<
     getTeam: () => team,
   }), [team]);
 
-  async function postToSlack() {
+  async function openSlackPreview(previewTeam: string) {
+    setSlackDropdownOpen(false);
+    setBusy("Generating preview…");
+    // Apply the preview team filter to the board, wait for React to repaint,
+    // then capture. Restore the filter afterwards regardless of outcome.
+    setSnapshotTeam(previewTeam);
     try {
-      setBusy("Generating snapshot…");
-      const image = await capturePng();
-      setBusy("Posting to Slack…");
-      const res = await fetch("/api/slack/post", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image, team }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Slack post failed");
-      flash("Snapshot posted to #temp-roadmap ✓");
+      // Two rAFs: first lets React flush state, second waits for the browser paint.
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const [image, previewRes] = await Promise.all([
+        capturePng(),
+        fetch("/api/slack/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ team: previewTeam }),
+        }),
+      ]);
+      const data = await previewRes.json();
+      if (!previewRes.ok || !data.ok) throw new Error(data.error || "Preview failed");
+      setSlackPreview({ image, message: data.message, team: previewTeam });
+      setEditedMessage(data.message);
     } catch (e: any) {
-      flash(e?.message || "Failed to post to Slack", true);
+      flash(e?.message || "Failed to generate preview", true);
     } finally {
+      setSnapshotTeam(null);
       setBusy(null);
     }
   }
 
-  async function sendDraftForApproval() {
+  async function confirmPostToSlack() {
+    if (!slackPreview) return;
     try {
-      setBusy("Generating snapshot…");
-      const image = await capturePng();
-      setBusy("Sending draft…");
+      setBusy("Posting to Slack…");
       const res = await fetch("/api/slack/post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image, team, draft: true }),
+        body: JSON.stringify({
+          image: slackPreview.image,
+          team: slackPreview.team,
+          message: editedMessage,
+        }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Draft send failed");
-      flash("Draft sent to you on Slack for approval ✓");
+      if (!res.ok || !data.ok) throw new Error(data.error || "Slack post failed");
+      setSlackPreview(null);
+      flash("Posted to Slack ✓");
     } catch (e: any) {
-      flash(e?.message || "Failed to send draft", true);
+      flash(e?.message || "Failed to post to Slack", true);
     } finally {
       setBusy(null);
     }
@@ -432,13 +634,23 @@ const RoadmapBoard = forwardRef<
     const pill = STATUS_PILL[it.status] ?? STATUS_PILL["To Do"];
     const owner = primaryAssigneeOf(it.primaryAssignees);
     const ac = colorForAssignee(owner, colourMap);
+    const code = codeMap.get(it.id) ?? it.cardCode;
+    const idToName = (bid: string) => items.find((i) => i.id === bid)?.name ?? "?";
+    const outDeps = it.depLinks ?? [];
+    const inDeps = reverseDepMap.get(it.id) ?? [];
+    const hasDeps = outDeps.length > 0 || inDeps.length > 0;
+    const isTracing = hoveredId !== null;
+    const inTrace = isTracing && traceChain.has(it.id);
 
     return (
       <div
-        ref={drag?.innerRef}
+        ref={(el) => {
+          if (drag?.innerRef) drag.innerRef(el);
+          cardRefs.current[it.id] = el;
+        }}
         {...(drag?.draggableProps ?? {})}
         {...(!readOnly ? (drag?.dragHandleProps ?? {}) : {})}
-        className={`card ${it.spansPods ? "shared" : ""} ${dragSnap?.isDragging ? "dragging" : ""} ${colSpan > 1 ? "spanning" : ""} ${it.priority === "High" ? "has-priority-flag" : ""}`}
+        className={`card ${it.spansPods ? "shared" : ""} ${dragSnap?.isDragging ? "dragging" : ""} ${colSpan > 1 ? "spanning" : ""} ${it.priority === "High" ? "has-priority-flag" : ""} ${inTrace ? "in-trace" : ""}`}
         style={{
           // Colour the card by its primary assignee
           borderLeftColor: ac.accent,
@@ -446,6 +658,8 @@ const RoadmapBoard = forwardRef<
           ...(drag?.draggableProps?.style ?? {}),
         }}
         onClick={() => setSelected(it)}
+        onMouseEnter={() => { if (hasDeps) setHoveredId(it.id); }}
+        onMouseLeave={() => setHoveredId(null)}
       >
         {it.priority === "High" && (
           <span className="priority-flag" title="High priority" aria-label="High priority">!</span>
@@ -497,6 +711,27 @@ const RoadmapBoard = forwardRef<
             </span>
           )}
         </div>
+
+        {hasDeps && (
+          <div className="dep-chip-row">
+            {outDeps.map((dep) => {
+              const name = idToName(dep.id);
+              return (
+                <span key={`out-${dep.id}`} className={`dep-chip dep-${dep.type}`} title={`${DEP_TYPE_LABELS[dep.type]}: ${name}`}>
+                  {DEP_TYPE_LABELS[dep.type]}: {name}
+                </span>
+              );
+            })}
+            {inDeps.map((dep) => {
+              const name = idToName(dep.fromId);
+              return (
+                <span key={`in-${dep.fromId}`} className="dep-chip dep-reverse" title={`${name} is ${DEP_TYPE_LABELS[dep.type].toLowerCase()} this`}>
+                  blocks: {name}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         {!readOnly && (
           <div
@@ -747,17 +982,40 @@ const RoadmapBoard = forwardRef<
 
             <div className="slack-actions">
               <span className="slack-actions-label">Share to Slack:</span>
-              <button
-                className="btn btn-soft"
-                onClick={sendDraftForApproval}
-                disabled={!!busy}
-                title="Send a draft screenshot to your Slack DMs to approve before posting"
-              >
-                Send draft
-              </button>
-              <button className="btn slack" onClick={postToSlack} disabled={!!busy}>
-                {busy || "Post to Slack"}
-              </button>
+              <div className="slack-btn-wrap" ref={slackDropdownRef}>
+                <button
+                  className="btn slack"
+                  onClick={() => setSlackDropdownOpen((v) => !v)}
+                  disabled={!!busy}
+                  aria-haspopup="true"
+                  aria-expanded={slackDropdownOpen}
+                >
+                  {busy || (
+                    <>
+                      Post to Slack
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 4, flexShrink: 0 }} aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </>
+                  )}
+                </button>
+                {slackDropdownOpen && (
+                  <div className="slack-dropdown">
+                    {(["All", "Host/Platform", "Customer"] as const).map((t) => (
+                      <button
+                        key={t}
+                        className="slack-dropdown-item"
+                        onClick={() => openSlackPreview(t)}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                        </svg>
+                        {t === "All" ? "All teams" : `${t} view`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -785,6 +1043,26 @@ const RoadmapBoard = forwardRef<
         )}
       </header>
 
+      {/* ── Dependency toolbar ─────────────────────────────── */}
+      {items.some((it) => (it.depLinks?.length ?? 0) > 0) && (
+        <div className="dep-toolbar">
+          <button
+            className={`dep-toggle ${showAllLinks ? "active" : ""}`}
+            onClick={() => setShowAllLinks((v) => !v)}
+            title={showAllLinks ? "Hide dependency arrows" : "Show all dependency arrows"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+            {showAllLinks ? "Hide links" : "Show all links"}
+          </button>
+          {!showAllLinks && (
+            <span style={{ fontSize: 11.5, color: "#94a3b8" }}>Hover a card with dependencies to trace its chain</span>
+          )}
+        </div>
+      )}
+
       {/* ── Board (snapshot region for Slack) ───────────────── */}
       <div className="board-wrap" ref={snapshotRef}>
         <div className="board-title-bar">
@@ -801,7 +1079,20 @@ const RoadmapBoard = forwardRef<
           </span>
         </div>
 
-        <div className="board">
+        <div className={`board ${hoveredId ? "tracing" : ""}`} ref={boardRef} style={{ position: "relative" }}>
+          {/* Dependency arrows overlay */}
+          {(showAllLinks || hoveredId !== null) && (
+            <DepArrows
+              items={items}
+              codeMap={codeMap}
+              blockedByMap={blockedByMap}
+              cardRefs={cardRefs.current}
+              boardRef={boardRef.current}
+              hoveredId={hoveredId}
+              showAll={showAllLinks}
+              traceChain={traceChain}
+            />
+          )}
           {/* Column headers */}
           <div className="grid">
             <div className="corner" />
@@ -861,7 +1152,56 @@ const RoadmapBoard = forwardRef<
             setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
             setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
           }}
+          allInitiatives={activeItems}
         />
+      )}
+
+      {/* ── Slack preview modal ────────────────────────────────── */}
+      {slackPreview && (
+        <div className="overlay" onClick={() => setSlackPreview(null)}>
+          <div className="modal slack-preview-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-left">
+                <h2>Preview Slack post</h2>
+                <p className="modal-subtitle">
+                  {slackPreview.team === "All" ? "All teams" : `${slackPreview.team} view`}
+                  {" · Review the message and snapshot before posting."}
+                </p>
+              </div>
+              <button className="modal-close-x" onClick={() => setSlackPreview(null)} aria-label="Close">✕</button>
+            </div>
+
+            <div className="slack-preview-body">
+              {/* Editable message text */}
+              <div className="slack-preview-message">
+                <div className="slack-preview-label">Message <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "#94a3b8" }}>— edit before posting</span></div>
+                <textarea
+                  className="slack-preview-textarea"
+                  value={editedMessage}
+                  onChange={(e) => setEditedMessage(e.target.value)}
+                  rows={8}
+                  spellCheck={false}
+                />
+              </div>
+
+              {/* Board snapshot */}
+              <div>
+                <div className="slack-preview-label">Snapshot</div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={slackPreview.image} alt="Board snapshot" className="slack-preview-img" />
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn btn-soft" onClick={() => setSlackPreview(null)}>
+                Cancel
+              </button>
+              <button className="btn slack" onClick={confirmPostToSlack} disabled={!!busy}>
+                {busy || "Post to Slack"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (

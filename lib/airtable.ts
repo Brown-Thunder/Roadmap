@@ -1,4 +1,4 @@
-import { Initiative } from "./types";
+import { Initiative, DepLink, assignCardCodes } from "./types";
 
 const API_BASE = "https://api.airtable.com/v0";
 
@@ -54,6 +54,21 @@ function toInitiative(rec: any): Initiative {
     layers: Array.isArray(f["Layers"]) ? f["Layers"] : [],
     completedDate: f["Completed Date"] || "",
     priority: f["Priority"] || "",
+    blockedBy: Array.isArray(f["Blocked by"]) ? f["Blocked by"] : [],
+    depLinks: (() => {
+      // Parse new typed dep links field
+      try {
+        const parsed: DepLink[] = f["Dependency Links"] ? JSON.parse(f["Dependency Links"]) : [];
+        // If no new-style links yet, migrate legacy blockedBy entries as "blocked-by" type
+        if (parsed.length === 0 && Array.isArray(f["Blocked by"]) && f["Blocked by"].length > 0) {
+          return (f["Blocked by"] as string[]).map((id) => ({ type: "blocked-by" as const, id }));
+        }
+        return parsed;
+      } catch {
+        return [];
+      }
+    })(),
+    cardCode: "",
   };
 }
 
@@ -83,6 +98,7 @@ function toFields(input: Partial<Initiative>): Record<string, any> {
     if (input.layers !== undefined) f["Layers"] = input.layers;
     if (input.completedDate !== undefined) f["Completed Date"] = input.completedDate || null;
     if (input.priority !== undefined) f["Priority"] = input.priority || null;
+    if (input.depLinks !== undefined) f["Dependency Links"] = JSON.stringify(input.depLinks);
   }
   return f;
 }
@@ -107,9 +123,12 @@ export async function listInitiatives(): Promise<Initiative[]> {
     offset = data.offset;
   } while (offset);
 
-  return records
+  const initiatives = records
     .map(toInitiative)
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+  const codes = assignCardCodes(initiatives);
+  for (const it of initiatives) it.cardCode = codes.get(it.id) ?? "";
+  return initiatives;
 }
 
 export async function createInitiative(

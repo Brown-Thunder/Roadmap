@@ -16,6 +16,11 @@ import {
   podsForArea,
   AREA_DEFAULT_POD,
   SPANS_PODS_AREAS,
+  assignCardCodes,
+  DEP_TYPE_LABELS,
+  DEP_TYPE_OPTIONS,
+  DepType,
+  DepLink,
 } from "@/lib/types";
 import type { GithubIssue } from "@/lib/github";
 import AssigneePicker from "./AssigneePicker";
@@ -42,6 +47,8 @@ const EMPTY: Draft = {
   layers: [],
   completedDate: "",
   priority: "",
+  blockedBy: [],
+  depLinks: [],
 };
 
 // Local YYYY-MM-DD for "today" without UTC drift.
@@ -58,6 +65,12 @@ function formatWeekPlanDate(iso: string): string {
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
+
+const DEP_CHIP_STYLE: Record<DepType, { bg: string; color: string; border: string }> = {
+  "blocked-by": { bg: "#fef2f2", color: "#991b1b", border: "#fecaca" },
+  "waiting-on": { bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
+  "related-to": { bg: "#f0f9ff", color: "#075985", border: "#bae6fd" },
+};
 
 const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
   priority:       { bg: "#fef2f2", color: "#b91c1c", border: "#fecaca" },
@@ -166,6 +179,7 @@ export default function InitiativeModal({
   onAddArea,
   onAddPod,
   onLocalUpdate,
+  allInitiatives = [],
 }: {
   initiative: Initiative | null;
   onClose: () => void;
@@ -176,8 +190,8 @@ export default function InitiativeModal({
   extraPods?: string[];
   onAddArea?: (a: string) => void;
   onAddPod?: (p: string) => void;
-  // Update the board's in-memory copy without closing the modal.
   onLocalUpdate?: (id: string, patch: Partial<Initiative>) => void;
+  allInitiatives?: Initiative[];
 }) {
   const isNew = !initiative;
   const [edit, setEdit] = useState(isNew);
@@ -192,6 +206,7 @@ export default function InitiativeModal({
   const [newAreaText, setNewAreaText] = useState("");
   const [showAddPod, setShowAddPod] = useState(false);
   const [newPodText, setNewPodText] = useState("");
+  const [depSearch, setDepSearch] = useState("");
 
   // People directory — drives the assignee dropdowns.
   const [people, setPeople] = useState<string[]>([]);
@@ -464,6 +479,21 @@ export default function InitiativeModal({
   if (isViewMode && initiative) {
     const primaryList = initiative.primaryAssignees.split(",").map((s) => s.trim()).filter(Boolean);
     const supportList = initiative.supportAssignees.split(",").map((s) => s.trim()).filter(Boolean);
+    // Group outbound depLinks by type
+    const depsByType = (initiative.depLinks ?? []).reduce<Record<DepType, string[]>>(
+      (acc, dep) => {
+        const name = allInitiatives.find((i) => i.id === dep.id)?.name;
+        if (name) acc[dep.type] = [...(acc[dep.type] ?? []), name];
+        return acc;
+      },
+      {} as Record<DepType, string[]>
+    );
+    // Reverse: what points at this initiative and with what type
+    const reverseLinks = allInitiatives.flatMap((i) =>
+      (i.depLinks ?? [])
+        .filter((d) => d.id === initiative.id)
+        .map((d) => ({ type: d.type, name: i.name }))
+    );
     const displayComments = form.comments ?? initiative.comments ?? [];
     const pill = STATUS_PILL[initiative.status] ?? STATUS_PILL["To Do"];
 
@@ -587,6 +617,28 @@ export default function InitiativeModal({
                   <div className="card-info-key">Scope</div>
                   <div className="card-info-val" style={{ color: "#92400e", fontWeight: 600 }}>
                     Spans Internal + 3rd Party Lockers
+                  </div>
+                </div>
+              )}
+              {(Object.keys(depsByType) as DepType[]).map((type) => (
+                <div key={type} className="card-info-row">
+                  <div className="card-info-key">{DEP_TYPE_LABELS[type]}</div>
+                  <div className="card-info-val" style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {depsByType[type].map((name) => (
+                      <span key={name} className={`dep-chip dep-${type}`}>{name}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {reverseLinks.length > 0 && (
+                <div className="card-info-row">
+                  <div className="card-info-key">Depended on by</div>
+                  <div className="card-info-val" style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {reverseLinks.map((r) => (
+                      <span key={r.name} className="dep-chip dep-reverse" title={`${r.name} is ${DEP_TYPE_LABELS[r.type].toLowerCase()} this`}>
+                        {r.name}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1048,9 +1100,97 @@ export default function InitiativeModal({
             </div>
           </div>
 
-          {/* ── Section 5: Extra ──────────────────────────────── */}
+          {/* ── Section 5: Dependencies ───────────────────────── */}
+          {allInitiatives.length > 0 && (
+            <div className="form-section">
+              <SectionHeading icon="🔗" title="Dependencies" />
+              <div className="form-field">
+                <FieldLabel hint="how is this initiative linked to others?">Linked initiatives</FieldLabel>
+                {(() => {
+                  const candidates = allInitiatives
+                    .filter((c) => c.id !== initiative?.id)
+                    .filter((c) => {
+                      const q = depSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return (
+                        c.name.toLowerCase().includes(q) ||
+                        c.area.toLowerCase().includes(q)
+                      );
+                    });
+
+                  function getDepType(id: string): DepType | null {
+                    return (form.depLinks ?? []).find((d) => d.id === id)?.type ?? null;
+                  }
+
+                  function setDepLink(id: string, type: DepType | null) {
+                    const current = (form.depLinks ?? []).filter((d) => d.id !== id);
+                    set("depLinks", type ? [...current, { type, id }] : current);
+                  }
+
+                  return (
+                    <>
+                      {allInitiatives.length > 6 && (
+                        <input
+                          className="form-input"
+                          style={{ marginBottom: 6, fontSize: 13 }}
+                          placeholder="Filter initiatives…"
+                          value={depSearch}
+                          onChange={(e) => setDepSearch(e.target.value)}
+                        />
+                      )}
+                      <div className="dep-picker">
+                        {candidates.length === 0 && (
+                          <div style={{ padding: "8px", fontSize: 12.5, color: "#94a3b8" }}>No initiatives found.</div>
+                        )}
+                        {candidates.map((c) => {
+                          const activeType = getDepType(c.id);
+                          return (
+                            <div key={c.id} className="dep-picker-item" style={{ alignItems: "flex-start", flexDirection: "column", gap: 6 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={activeType !== null}
+                                  onChange={() => setDepLink(c.id, activeType !== null ? null : "blocked-by")}
+                                  style={{ width: 15, height: 15, cursor: "pointer", accentColor: "#6366f1", flexShrink: 0 }}
+                                />
+                                <span className="dep-picker-name">{c.name}</span>
+                                <span className="dep-picker-area">{c.area}</span>
+                              </div>
+                              {activeType !== null && (
+                                <div style={{ display: "flex", gap: 6, paddingLeft: 23 }}>
+                                  {DEP_TYPE_OPTIONS.map((t) => (
+                                    <button
+                                      key={t}
+                                      type="button"
+                                      onClick={() => setDepLink(c.id, t)}
+                                      style={{
+                                        fontSize: 11.5, fontWeight: 600, padding: "3px 9px",
+                                        borderRadius: 6, border: "1.5px solid",
+                                        cursor: "pointer",
+                                        background: activeType === t ? DEP_CHIP_STYLE[t].bg : "#f8fafc",
+                                        color: activeType === t ? DEP_CHIP_STYLE[t].color : "#64748b",
+                                        borderColor: activeType === t ? DEP_CHIP_STYLE[t].border : "#e2e8f0",
+                                      }}
+                                    >
+                                      {DEP_TYPE_LABELS[t]}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* ── Section 6: Extra ──────────────────────────────── */}
           <div className="form-section" style={{ borderBottom: "none" }}>
-            <SectionHeading icon="🔗" title="Links & notes" />
+            <SectionHeading icon="📎" title="Links & notes" />
 
             <div className="form-field">
               <FieldLabel hint="optional">Link (GitHub / doc / ticket)</FieldLabel>

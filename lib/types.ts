@@ -11,17 +11,35 @@ export type TShirtSize = "XS" | "S" | "M" | "L" | "XL";
 
 export type Area =
   | "Lockers"
-  | "Marketing"
+  | "Partnerships"
+  | "Customer/Demand"
   | "Finance"
+  | "Supply"
+  | "Customer Support"
+  | "Activation"
   | "Engineering"
-  | "Customer Success"
-  | "Product";
+  | "Other";
 
 export interface Comment {
   id: string;       // timestamp-based local id
   author: string;
   text: string;
   createdAt: string; // ISO string
+}
+
+export type DepType = "blocked-by" | "waiting-on" | "related-to";
+
+export const DEP_TYPE_LABELS: Record<DepType, string> = {
+  "blocked-by":  "Blocked by",
+  "waiting-on":  "Waiting on",
+  "related-to":  "Related to",
+};
+
+export const DEP_TYPE_OPTIONS: DepType[] = ["blocked-by", "waiting-on", "related-to"];
+
+export interface DepLink {
+  type: DepType;
+  id: string; // Airtable record ID of the linked initiative
 }
 
 export interface Initiative {
@@ -46,6 +64,9 @@ export interface Initiative {
   layers: string[];      // ["Frontend", "Backend"]
   completedDate: string; // ISO date "YYYY-MM-DD" or "" if not completed
   priority: Priority | ""; // "High" | "Medium" | "Low" | ""
+  blockedBy: string[];   // legacy: Airtable multipleRecordLinks field IDs (read-only migration)
+  depLinks: DepLink[];   // typed dependency links stored as JSON in "Dependency Links"
+  cardCode: string;      // auto-generated: area initial + order, e.g. "L1", "M2"
 }
 
 export type Priority = "High" | "Medium" | "Low";
@@ -59,11 +80,14 @@ export const TIMEFRAMES: Timeframe[] = ["This Week", "Next Week", "Future"];
 
 export const AREA_ORDER: string[] = [
   "Lockers",
-  "Marketing",
-  "Product",
+  "Partnerships",
+  "Customer/Demand",
+  "Supply",
+  "Customer Support",
+  "Activation",
   "Engineering",
-  "Customer Success",
   "Finance",
+  "Other",
 ];
 
 export const STATUS_COLORS: Record<string, string> = {
@@ -84,24 +108,33 @@ export const TEAM_OPTIONS = ["Host/Platform", "Customer"];
 
 export const AREA_OPTIONS = [
   "Lockers",
-  "Marketing",
+  "Partnerships",
+  "Customer/Demand",
   "Finance",
+  "Supply",
+  "Customer Support",
+  "Activation",
   "Engineering",
-  "Customer Success",
-  "Product",
+  "Other",
 ];
 
 // Pods available per area. An area NOT listed here is "its own pod" — the pod
 // picker is hidden and the Pod field is left empty in Airtable.
 export const AREA_PODS: Record<string, string[]> = {
   Lockers: ["Internal Lockers", "3rd Party Lockers"],
-  Marketing: ["Organic Search"],
+  Partnerships: ["OTAs"],
+  "Customer/Demand": ["Customers & Demand", "Organic Growth"],
+  Engineering: ["Tech debt", "Bugs"],
+  Other: ["Other"],
 };
 
 // Default pod to pre-select when an area is chosen (if it has pods).
 export const AREA_DEFAULT_POD: Record<string, string> = {
   Lockers: "3rd Party Lockers",
-  Marketing: "Organic Search",
+  Partnerships: "OTAs",
+  "Customer/Demand": "Customers & Demand",
+  Engineering: "Tech debt",
+  Other: "Other",
 };
 
 // Only these areas can have an initiative that spans multiple pods.
@@ -119,7 +152,12 @@ export function podsForArea(area: string): string[] {
 export const POD_OPTIONS = [
   "Internal Lockers",
   "3rd Party Lockers",
-  "Organic Search",
+  "OTAs",
+  "Customers & Demand",
+  "Organic Growth",
+  "Tech debt",
+  "Bugs",
+  "Other",
 ];
 export const STATUS_OPTIONS: Status[] = [
   "In Flight",
@@ -215,4 +253,40 @@ export function colorForAssignee(
 // The first primary assignee drives a card's colour.
 export function primaryAssigneeOf(primaryAssignees: string): string {
   return (primaryAssignees || "").split(",").map((s) => s.trim()).filter(Boolean)[0] ?? "";
+}
+
+// Area → single letter prefix for card codes (e.g. "Lockers" → "L").
+// Longer unique prefixes for areas that share the same first letter.
+const AREA_CODE: Record<string, string> = {
+  Lockers:            "L",
+  Partnerships:       "Pa",
+  "Customer/Demand":  "CD",
+  Finance:            "Fi",
+  Supply:             "Su",
+  "Customer Support": "CS",
+  Activation:         "Ac",
+  Engineering:        "E",
+  Other:              "O",
+};
+
+export function areaPrefix(area: string): string {
+  return AREA_CODE[area] ?? (area.charAt(0).toUpperCase() || "X");
+}
+
+// Assign stable card codes to a flat list of initiatives.
+// Code = area prefix + per-area sequence number (1-based, ordered by `order` field).
+export function assignCardCodes(initiatives: Initiative[]): Map<string, string> {
+  const byArea = new Map<string, Initiative[]>();
+  for (const it of initiatives) {
+    const key = it.area || "X";
+    if (!byArea.has(key)) byArea.set(key, []);
+    byArea.get(key)!.push(it);
+  }
+  const result = new Map<string, string>();
+  for (const [area, group] of byArea) {
+    const sorted = [...group].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+    const prefix = areaPrefix(area);
+    sorted.forEach((it, idx) => result.set(it.id, `${prefix}${idx + 1}`));
+  }
+  return result;
 }

@@ -10,7 +10,6 @@ const isPublicRoute = createRouteMatcher([
   "/sso-callback(.*)",
   "/not-allowed(.*)",
   "/api/og(.*)",
-  "/api/debug-editor(.*)",
 ]);
 
 
