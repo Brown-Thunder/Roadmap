@@ -740,6 +740,38 @@ export default function InitiativeModal({
           <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
+        {/* Team picker — sits above everything so it filters the GitHub issue list */}
+        <div style={{
+          padding: "10px 24px",
+          borderBottom: "1px solid #e2e8f0",
+          background: "#fafbfc",
+          display: "flex", alignItems: "center", gap: 12,
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+            Team
+          </span>
+          <div style={{ display: "flex", gap: 6 }}>
+            {TEAM_OPTIONS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => set("team", t)}
+                style={{
+                  fontSize: 12.5, fontWeight: 600, padding: "5px 14px",
+                  borderRadius: 8, border: "1.5px solid",
+                  cursor: "pointer",
+                  background: form.team === t ? "#eef2ff" : "#fff",
+                  color: form.team === t ? "#3730a3" : "#475569",
+                  borderColor: form.team === t ? "#c7d2fe" : "#e2e8f0",
+                  transition: "all 0.12s",
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Scrollable form body */}
         <div className="edit-form-body">
 
@@ -921,23 +953,13 @@ export default function InitiativeModal({
           <div className="form-section">
             <SectionHeading icon="📍" title="Where does it live?" />
 
-            <div className="form-row-2">
-              <div className="form-field">
-                <FieldLabel>Team</FieldLabel>
-                <StyledSelect
-                  value={form.team || ""}
-                  onChange={(v) => set("team", v)}
-                  options={TEAM_OPTIONS.map((o) => ({ value: o, label: o }))}
-                />
-              </div>
-              <div className="form-field">
-                <FieldLabel>Timeframe</FieldLabel>
-                <StyledSelect
-                  value={form.timeframe || ""}
-                  onChange={(v) => set("timeframe", v as any)}
-                  options={TIMEFRAMES.map((o) => ({ value: o, label: o }))}
-                />
-              </div>
+            <div className="form-field">
+              <FieldLabel>Timeframe</FieldLabel>
+              <StyledSelect
+                value={form.timeframe || ""}
+                onChange={(v) => set("timeframe", v as any)}
+                options={TIMEFRAMES.map((o) => ({ value: o, label: o }))}
+              />
             </div>
 
             <div className={showPods ? "form-row-2" : ""}>

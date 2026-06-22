@@ -104,7 +104,7 @@ query ($org: String!, $number: Int!, $cursor: String) {
           squad: fieldValueByName(name: "Squad") {
             ... on ProjectV2ItemFieldSingleSelectValue { name }
           }
-          weekPlan2: fieldValueByName(name: "Week Plan 2 ") {
+          weekPlan2: fieldValueByName(name: "Week Plan") {
             ... on ProjectV2ItemFieldDateValue { date }
           }
           content {
