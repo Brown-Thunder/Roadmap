@@ -1,4 +1,5 @@
 import { Initiative, Timeframe, AREA_ORDER, TIMEFRAMES } from "./types";
+import type { BoardConfig } from "./boardConfig";
 
 export interface Lane {
   key: string;
@@ -21,12 +22,21 @@ function laneKeyFor(i: Initiative): string {
   return i.area;
 }
 
-export function buildGroups(initiatives: Initiative[]): AreaGroup[] {
+export function laneLabel(area: string, laneKey: string, config?: BoardConfig): string {
+  if (config?.laneLabels) {
+    const override = config.laneLabels[`${area}|||${laneKey}`];
+    if (override) return override;
+  }
+  return laneKey;
+}
+
+export function buildGroups(initiatives: Initiative[], config?: BoardConfig): AreaGroup[] {
   const areas = Array.from(new Set(initiatives.map((i) => i.area).filter(Boolean)));
+  const order = config?.areaOrder?.length ? config.areaOrder : AREA_ORDER;
   areas.sort((a, b) => {
-    const ia = AREA_ORDER.indexOf(a);
-    const ib = AREA_ORDER.indexOf(b);
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
   });
 
   return areas.map((area) => {
@@ -40,18 +50,18 @@ export function buildGroups(initiatives: Initiative[]): AreaGroup[] {
       );
       const hasShared = initiatives.some((i) => i.area === area && i.spansPods);
       if (hasThird)
-        lanes.push({ key: "3rd Party Lockers", label: "3rd Party Lockers" });
+        lanes.push({ key: "3rd Party Lockers", label: laneLabel(area, "3rd Party Lockers", config) });
       if (hasInternal)
-        lanes.push({ key: "Internal Lockers", label: "Internal Lockers" });
+        lanes.push({ key: "Internal Lockers", label: laneLabel(area, "Internal Lockers", config) });
       if (hasShared)
         lanes.push({
           key: "shared",
-          label: "Shared · Internal + 3rd Party",
+          label: laneLabel(area, "shared", config) || "Shared · Internal + 3rd Party",
           shared: true,
         });
       return { area, lanes };
     }
-    return { area, lanes: [{ key: area, label: area }] };
+    return { area, lanes: [{ key: area, label: laneLabel(area, area, config) }] };
   });
 }
 

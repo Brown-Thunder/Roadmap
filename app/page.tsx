@@ -1,7 +1,10 @@
 import { listInitiatives } from "@/lib/airtable";
-import RoadmapBoard from "@/components/RoadmapBoard";
+import { listRoadmapInitiatives } from "@/lib/roadmap-initiatives";
+import { isRoadmapPublished } from "@/lib/settings";
+import AppShell from "@/components/AppShell";
 import ErrorState from "@/components/ErrorState";
 import { Initiative } from "@/lib/types";
+import { RoadmapInitiative } from "@/lib/roadmap-initiatives";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { isEditorEmail } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -22,18 +25,30 @@ export default async function Home() {
     if (email) editorAccess = await isEditorEmail(email);
   }
 
-  // Non-editors who somehow reach / get sent to the read-only view
   if (!editorAccess) redirect("/view");
 
   let initiatives: Initiative[] = [];
+  let roadmapInitiatives: RoadmapInitiative[] = [];
+  let roadmapPublished = false;
   let error: string | null = null;
   try {
-    initiatives = await listInitiatives();
+    [initiatives, roadmapInitiatives, roadmapPublished] = await Promise.all([
+      listInitiatives(),
+      listRoadmapInitiatives().catch(() => []),
+      isRoadmapPublished().catch(() => false),
+    ]);
   } catch (e: any) {
     error = e?.message || "Failed to load initiatives.";
   }
 
   if (error) return <ErrorState error={error} />;
 
-  return <RoadmapBoard initial={initiatives} canManageEditors={editorAccess} />;
+  return (
+    <AppShell
+      initiatives={initiatives}
+      roadmapInitiatives={roadmapInitiatives}
+      canManageEditors={editorAccess}
+      roadmapPublished={roadmapPublished}
+    />
+  );
 }

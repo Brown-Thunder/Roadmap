@@ -26,7 +26,7 @@ export default function NotAllowedPage() {
           <div className="brand-titles">
             <span className="brand-wordmark">Stasher</span>
             <span className="brand-divider" />
-            <span className="brand-product">Weekly Priorities</span>
+            <span className="brand-product">Pulse</span>
           </div>
         </div>
 

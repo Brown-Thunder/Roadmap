@@ -31,6 +31,8 @@ import {
 import InitiativeModal from "./InitiativeModal";
 import UserMenu from "./UserMenu";
 import type { GithubIssue } from "@/lib/github";
+import type { BoardConfig } from "@/lib/boardConfig";
+import { DEFAULT_BOARD_CONFIG } from "@/lib/boardConfig";
 
 function getMondayOf(d: Date): Date {
   const day = d.getDay();
@@ -193,8 +195,8 @@ export type RoadmapBoardHandle = {
 
 const RoadmapBoard = forwardRef<
   RoadmapBoardHandle,
-  { initial: Initiative[]; readOnly?: boolean; canManageEditors?: boolean }
->(function RoadmapBoard({ initial, readOnly = false, canManageEditors = false }, ref) {
+  { initial: Initiative[]; readOnly?: boolean; canManageEditors?: boolean; inShell?: boolean }
+>(function RoadmapBoard({ initial, readOnly = false, canManageEditors = false, inShell = false }, ref) {
   const [items, setItems] = useState<Initiative[]>(initial);
   const [team, setTeam] = useState<string>("All");
   const [assignee, setAssignee] = useState<string>("All");
@@ -239,6 +241,15 @@ const RoadmapBoard = forwardRef<
   const [ghLoading, setGhLoading] = useState(false);
   const [ghError, setGhError] = useState<string | null>(null);
 
+  // Board layout config — area order + lane label overrides (editors only).
+  const [boardConfig, setBoardConfig] = useState<BoardConfig>(DEFAULT_BOARD_CONFIG);
+  // Inline rename: which lane is being edited, and its current draft value.
+  const [renamingLane, setRenamingLane] = useState<{ area: string; key: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  // Area reorder drag state (mouse-based, separate from card DnD).
+  const [draggingArea, setDraggingArea] = useState<string | null>(null);
+  const [dragOverArea, setDragOverArea] = useState<string | null>(null);
+
   const measureSpan = useCallback((id: string, el: HTMLElement | null) => {
     if (!el) return;
     const h = el.getBoundingClientRect().height;
@@ -280,6 +291,27 @@ const RoadmapBoard = forwardRef<
   }, []);
   useEffect(() => { loadColours(); }, [loadColours]);
 
+  // Load board layout config (area order + lane label overrides).
+  useEffect(() => {
+    fetch("/api/board-config")
+      .then((r) => r.json())
+      .then((data) => { if (data.ok && data.config) setBoardConfig(data.config); })
+      .catch(() => {});
+  }, []);
+
+  // Persist a config change to the server and update local state optimistically.
+  const saveConfig = useCallback((patch: Partial<BoardConfig>) => {
+    setBoardConfig((prev) => {
+      const next = { ...prev, ...patch };
+      fetch("/api/board-config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }).catch(() => {});
+      return next;
+    });
+  }, []);
+
   // Close Slack dropdown when clicking outside it
   useEffect(() => {
     if (!slackDropdownOpen) return;
@@ -300,7 +332,7 @@ const RoadmapBoard = forwardRef<
     () => filterByAssignee(filterByTeam(activeItems, snapshotTeam ?? team), assignee),
     [activeItems, team, snapshotTeam, assignee]
   );
-  const groups = useMemo(() => buildGroups(filtered), [filtered]);
+  const groups = useMemo(() => buildGroups(filtered, boardConfig), [filtered, boardConfig]);
 
   // Build a stable id→cardCode map from the full items list.
   const codeMap = useMemo(() => {
@@ -773,18 +805,94 @@ const RoadmapBoard = forwardRef<
     );
   }
 
+  function commitRename() {
+    if (!renamingLane) return;
+    const { area, key } = renamingLane;
+    const trimmed = renameValue.trim();
+    const laneLabels = { ...boardConfig.laneLabels };
+    if (trimmed) {
+      laneLabels[`${area}|||${key}`] = trimmed;
+    } else {
+      delete laneLabels[`${area}|||${key}`];
+    }
+    saveConfig({ laneLabels });
+    setRenamingLane(null);
+  }
+
+  function startRename(area: string, key: string, currentLabel: string) {
+    setRenamingLane({ area, key });
+    setRenameValue(currentLabel);
+  }
+
+  function onAreaDragStart(area: string) {
+    setDraggingArea(area);
+  }
+
+  function onAreaDragOver(e: React.DragEvent, area: string) {
+    e.preventDefault();
+    if (area !== draggingArea) setDragOverArea(area);
+  }
+
+  function onAreaDrop(targetArea: string) {
+    if (!draggingArea || draggingArea === targetArea) {
+      setDraggingArea(null);
+      setDragOverArea(null);
+      return;
+    }
+    const order = [...boardConfig.areaOrder];
+    const from = order.indexOf(draggingArea);
+    const to = order.indexOf(targetArea);
+    if (from === -1 || to === -1) {
+      setDraggingArea(null);
+      setDragOverArea(null);
+      return;
+    }
+    order.splice(from, 1);
+    order.splice(to, 0, draggingArea);
+    saveConfig({ areaOrder: order });
+    setDraggingArea(null);
+    setDragOverArea(null);
+  }
+
   function renderGroups() {
     return groups.map((g) => (
-      <div key={g.area}>
+      <div
+        key={g.area}
+        draggable={!readOnly}
+        onDragStart={!readOnly ? () => onAreaDragStart(g.area) : undefined}
+        onDragOver={!readOnly ? (e) => onAreaDragOver(e, g.area) : undefined}
+        onDrop={!readOnly ? () => onAreaDrop(g.area) : undefined}
+        onDragEnd={!readOnly ? () => { setDraggingArea(null); setDragOverArea(null); } : undefined}
+        style={{
+          opacity: draggingArea === g.area ? 0.4 : 1,
+          outline: dragOverArea === g.area ? "2px solid #6366f1" : undefined,
+          outlineOffset: dragOverArea === g.area ? "-2px" : undefined,
+          transition: "opacity 0.15s",
+        }}
+      >
         <div className="area-row">
-          <div className="area-label">{g.area}</div>
+          <div className="area-label">
+            {!readOnly && (
+              <svg
+                className="area-drag-handle"
+                width="10" height="14" viewBox="0 0 10 14"
+                fill="none" aria-hidden="true"
+              >
+                <circle cx="2.5" cy="2" r="1.2" fill="currentColor" />
+                <circle cx="7.5" cy="2" r="1.2" fill="currentColor" />
+                <circle cx="2.5" cy="7" r="1.2" fill="currentColor" />
+                <circle cx="7.5" cy="7" r="1.2" fill="currentColor" />
+                <circle cx="2.5" cy="12" r="1.2" fill="currentColor" />
+                <circle cx="7.5" cy="12" r="1.2" fill="currentColor" />
+              </svg>
+            )}
+            {g.area}
+          </div>
           <div className="area-span" />
         </div>
         {g.lanes.map((lane) => {
           // For each timeframe column index, compute how much vertical space a
-          // spanning card from an EARLIER column reserves at the top. This is
-          // what pushes other cards down so nothing else has to move.
-          // reservedTop[colIdx] = height (px) to insert as a spacer at the top.
+          // spanning card from an EARLIER column reserves at the top.
           const reservedTop: Record<number, number> = {};
           for (let ci = 0; ci < TIMEFRAMES.length; ci++) {
             const startTf = TIMEFRAMES[ci];
@@ -797,9 +905,6 @@ const RoadmapBoard = forwardRef<
               const colSpan = Math.min(dur, TIMEFRAMES.length - ci);
               if (colSpan <= 1) continue;
               const h = spanHeights[it.id] ?? 64;
-              // Reserve the band height in the columns it overflows INTO (not its
-              // origin). The flex `gap` then separates it from cards below, matching
-              // how the origin column stacks its own cards under the spanning card.
               for (let d = 1; d < colSpan; d++) {
                 const overlapIdx = ci + d;
                 reservedTop[overlapIdx] = Math.max(reservedTop[overlapIdx] ?? 0, h);
@@ -807,19 +912,67 @@ const RoadmapBoard = forwardRef<
             }
           }
 
+          const isRenaming = !readOnly && renamingLane?.area === g.area && renamingLane?.key === lane.key;
+
           return (
             <div className="lane-row" key={lane.key} style={{ position: "relative" }}>
               <div className={`lane-label ${lane.shared ? "shared" : ""}`}>
                 {lane.shared && <span className="shared-marker" aria-hidden />}
                 {lane.shared ? (
                   <span>
-                    Shared
+                    {isRenaming ? (
+                      <input
+                        className="lane-rename-input"
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename();
+                          if (e.key === "Escape") setRenamingLane(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <>
+                        {lane.label}
+                        {!readOnly && (
+                          <button
+                            className="lane-rename-btn"
+                            title="Rename"
+                            onClick={(e) => { e.stopPropagation(); startRename(g.area, lane.key, lane.label); }}
+                          >✎</button>
+                        )}
+                      </>
+                    )}
                     <span className="shared-sub" style={{ display: "block" }}>
                       Internal + 3rd Party
                     </span>
                   </span>
+                ) : isRenaming ? (
+                  <input
+                    className="lane-rename-input"
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitRename();
+                      if (e.key === "Escape") setRenamingLane(null);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
                 ) : (
-                  lane.label
+                  <>
+                    {lane.label}
+                    {!readOnly && (
+                      <button
+                        className="lane-rename-btn"
+                        title="Rename"
+                        onClick={(e) => { e.stopPropagation(); startRename(g.area, lane.key, lane.label); }}
+                      >✎</button>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -935,6 +1088,15 @@ const RoadmapBoard = forwardRef<
       <header className="topbar">
         {/* Row 1: brand + global nav/actions */}
         <div className="topbar-row topbar-row-main">
+          {inShell ? (
+            <div className="brand-text">
+              <div className="sub" style={{ fontSize: 12 }}>
+                {readOnly
+                  ? "Click any card to view details."
+                  : "Drag cards to move them · drag a card's right edge to span weeks."}
+              </div>
+            </div>
+          ) : (
           <div className="brand-lockup">
             <svg className="brand-icon" width="30" height="26" viewBox="0 0 122 104" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path d="M105.793 26.3962H86.4293C85.253 13.2727 74.1686 2.95496 60.7769 2.95496C47.34 2.95496 36.3009 13.2727 35.1246 26.3962H15.7609C8.97452 26.3962 3.45496 31.9171 3.45496 38.7051V88.529C3.45496 95.3169 8.97452 100.838 15.7609 100.838H105.838C112.625 100.838 118.144 95.3169 118.144 88.529V38.7051C118.144 31.9171 112.579 26.3962 105.793 26.3962ZM49.8283 31.8266C51.1856 36.6234 55.5741 40.1079 60.7769 40.1079C65.9798 40.1079 70.3683 36.5782 71.7256 31.8266H80.8645C79.281 41.194 70.685 49.7016 61.6365 58.6618C61.3651 58.9333 61.0484 59.2048 60.7769 59.5216C60.5055 59.2501 60.1888 58.9785 59.9173 58.6618C50.8689 49.7016 42.2728 41.194 40.6894 31.8266H49.8283ZM54.8502 28.7493C54.8502 25.4911 57.5195 22.8212 60.7769 22.8212C64.0344 22.8212 66.7037 25.4911 66.7037 28.7493C66.7037 32.0076 64.0344 34.6775 60.7769 34.6775C57.5195 34.6775 54.8502 32.0076 54.8502 28.7493ZM56.117 62.5083C57.0218 63.4134 57.9719 64.3184 58.8768 65.2687C59.3744 65.7665 60.0983 66.0833 60.7769 66.0833C61.4556 66.0833 62.1795 65.8118 62.6771 65.2687C63.582 64.3637 64.532 63.4134 65.4369 62.5083C75.3902 52.6431 84.8458 43.2304 86.3388 31.8266H95.2968V95.4527H26.2571V31.8266H35.215C36.6628 43.2756 46.1184 52.6431 56.117 62.5083ZM60.7769 8.4306C71.1827 8.4306 79.8239 16.3047 80.955 26.4414H71.8613C70.7755 21.2825 66.206 17.436 60.7317 17.436C55.2574 17.436 50.6879 21.2825 49.6021 26.4414H40.5084C41.7299 16.3047 50.3712 8.4306 60.7769 8.4306ZM8.8388 88.5742V38.7051C8.8388 34.9038 11.9153 31.8266 15.7156 31.8266H20.828V95.4527H15.7156C11.9605 95.4527 8.8388 92.3755 8.8388 88.5742ZM112.715 88.5742C112.715 92.3755 109.639 95.4527 105.838 95.4527H100.726V31.8266H105.838C109.639 31.8266 112.715 34.9038 112.715 38.7051V88.5742Z" fill="#102A56"/>
@@ -943,7 +1105,7 @@ const RoadmapBoard = forwardRef<
               <div className="brand-titles">
                 <span className="brand-wordmark">Stasher</span>
                 <span className="brand-divider" />
-                <span className="brand-product">Weekly Priorities</span>
+                <span className="brand-product">Pulse</span>
                 {readOnly && <span className="readonly-badge">View only</span>}
               </div>
               <div className="sub">
@@ -953,6 +1115,7 @@ const RoadmapBoard = forwardRef<
               </div>
             </div>
           </div>
+          )}
 
           <nav className="topbar-actions">
             <Link href="/history" className="btn btn-soft">History</Link>
@@ -1090,7 +1253,7 @@ const RoadmapBoard = forwardRef<
               <path d="M105.793 26.3962H86.4293C85.253 13.2727 74.1686 2.95496 60.7769 2.95496C47.34 2.95496 36.3009 13.2727 35.1246 26.3962H15.7609C8.97452 26.3962 3.45496 31.9171 3.45496 38.7051V88.529C3.45496 95.3169 8.97452 100.838 15.7609 100.838H105.838C112.625 100.838 118.144 95.3169 118.144 88.529V38.7051C118.144 31.9171 112.579 26.3962 105.793 26.3962ZM49.8283 31.8266C51.1856 36.6234 55.5741 40.1079 60.7769 40.1079C65.9798 40.1079 70.3683 36.5782 71.7256 31.8266H80.8645C79.281 41.194 70.685 49.7016 61.6365 58.6618C61.3651 58.9333 61.0484 59.2048 60.7769 59.5216C60.5055 59.2501 60.1888 58.9785 59.9173 58.6618C50.8689 49.7016 42.2728 41.194 40.6894 31.8266H49.8283ZM54.8502 28.7493C54.8502 25.4911 57.5195 22.8212 60.7769 22.8212C64.0344 22.8212 66.7037 25.4911 66.7037 28.7493C66.7037 32.0076 64.0344 34.6775 60.7769 34.6775C57.5195 34.6775 54.8502 32.0076 54.8502 28.7493ZM56.117 62.5083C57.0218 63.4134 57.9719 64.3184 58.8768 65.2687C59.3744 65.7665 60.0983 66.0833 60.7769 66.0833C61.4556 66.0833 62.1795 65.8118 62.6771 65.2687C63.582 64.3637 64.532 63.4134 65.4369 62.5083C75.3902 52.6431 84.8458 43.2304 86.3388 31.8266H95.2968V95.4527H26.2571V31.8266H35.215C36.6628 43.2756 46.1184 52.6431 56.117 62.5083ZM60.7769 8.4306C71.1827 8.4306 79.8239 16.3047 80.955 26.4414H71.8613C70.7755 21.2825 66.206 17.436 60.7317 17.436C55.2574 17.436 50.6879 21.2825 49.6021 26.4414H40.5084C41.7299 16.3047 50.3712 8.4306 60.7769 8.4306ZM8.8388 88.5742V38.7051C8.8388 34.9038 11.9153 31.8266 15.7156 31.8266H20.828V95.4527H15.7156C11.9605 95.4527 8.8388 92.3755 8.8388 88.5742ZM112.715 88.5742C112.715 92.3755 109.639 95.4527 105.838 95.4527H100.726V31.8266H105.838C109.639 31.8266 112.715 34.9038 112.715 38.7051V88.5742Z" fill="#102A56"/>
             </svg>
             <span className="board-title">
-              Weekly Priorities{team !== "All" && <span style={{ fontWeight: 500, color: "#94a3b8" }}> · {team}</span>}
+              Pulse{team !== "All" && <span style={{ fontWeight: 500, color: "#94a3b8" }}> · {team}</span>}
             </span>
           </div>
           <span className="board-date">

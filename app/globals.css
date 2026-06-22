@@ -389,6 +389,55 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
   font-size: 10.5px; font-weight: 500; color: #94a3b8;
 }
 
+/* Drag handle for reordering areas (editor-only) */
+.area-drag-handle {
+  color: #cbd5e1;
+  cursor: grab;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.area-row:hover .area-drag-handle {
+  opacity: 1;
+}
+.area-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Rename button / input for lane labels (editor-only) */
+.lane-rename-btn {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #94a3b8;
+  border-radius: 4px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.1s;
+  flex-shrink: 0;
+}
+.lane-label:hover .lane-rename-btn {
+  opacity: 1;
+}
+.lane-rename-btn:hover {
+  background: #e2e8f0;
+  color: #475569;
+}
+.lane-rename-input {
+  width: 100%;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: #fff;
+  border: 1.5px solid #6366f1;
+  border-radius: 5px;
+  padding: 2px 6px;
+  outline: none;
+  min-width: 0;
+}
+
 /* Cells */
 .cell {
   padding: 8px;
@@ -1604,3 +1653,1396 @@ a.link:hover { text-decoration: underline; }
 }
 .dep-picker-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dep-picker-area { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+
+/* ─── App shell ──────────────────────────────────────────────── */
+.app-shell { max-width: 1480px; margin: 0 auto; padding: 0 16px 48px; }
+@media (min-width: 640px) { .app-shell { padding-left: 24px; padding-right: 24px; } }
+
+/* ─── Tab navigation bar ─────────────────────────────────────── */
+.app-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  margin: 12px 0 14px;
+  padding: 0 12px;
+  height: 52px;
+  position: sticky;
+  top: 8px;
+  z-index: 200;
+}
+@media (min-width: 640px) {
+  .app-tabs { margin: 20px 0 16px; padding: 0 18px; }
+}
+.app-tabs-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+@media (min-width: 640px) { .app-tabs-brand { gap: 10px; margin-right: 20px; } }
+.app-tabs-wordmark {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+@media (min-width: 640px) { .app-tabs-wordmark { font-size: 17px; } }
+.app-tabs-divider {
+  display: inline-block;
+  width: 1px;
+  height: 15px;
+  background: #cbd5e1;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.app-tabs-product {
+  font-size: 15px;
+  font-weight: 700;
+  color: #00A969;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+/* Desktop pill list — hidden on mobile */
+.app-tabs-list {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+@media (min-width: 580px) { .app-tabs-list { display: flex; } }
+
+.app-tab {
+  height: 34px;
+  padding: 0 11px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+@media (min-width: 720px) { .app-tab { padding: 0 14px; font-size: 13.5px; } }
+.app-tab:hover { background: #f1f5f9; color: var(--ink); }
+.app-tab.active { background: #eef2ff; color: #3730a3; }
+
+/* Show short label below ~720px, full label above */
+.app-tab-short { display: inline; }
+.app-tab-full  { display: none; }
+@media (min-width: 720px) {
+  .app-tab-short { display: none; }
+  .app-tab-full  { display: inline; }
+}
+
+/* Mobile select — visible only when pill list is hidden */
+.app-tabs-select {
+  display: flex;
+  flex: 1;
+  height: 34px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 0 10px;
+  cursor: pointer;
+  max-width: 200px;
+}
+@media (min-width: 580px) { .app-tabs-select { display: none; } }
+
+.app-tabs-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+  padding-left: 8px;
+}
+
+/* Tab content wrapper — remove the .page padding since AppShell handles it */
+.app-shell .page {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── Product Roadmap ────────────────────────────────────────── */
+.rm-root { padding: 4px 0 32px; }
+
+.rm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.rm-header-left { flex: 1; min-width: 0; }
+.rm-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0 0 4px;
+  letter-spacing: -0.03em;
+}
+.rm-subtitle { font-size: 13px; color: var(--muted); margin: 0; }
+.rm-header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.rm-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.rm-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  align-self: center;
+  margin-left: 4px;
+}
+
+.rm-empty {
+  text-align: center;
+  padding: 64px 24px;
+  color: var(--muted);
+  font-size: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.rm-groups { display: flex; flex-direction: column; gap: 20px; }
+
+.rm-group {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.rm-group-header {
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fafbfc;
+}
+.rm-group-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rm-group-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.rm-goal-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.rm-goal-link {
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 4px;
+  opacity: 0.8;
+}
+
+.rm-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1px;
+  background: var(--line);
+}
+
+.rm-card {
+  background: var(--panel);
+  border-left: 3px solid #e2e8f0;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.rm-card:hover { background: #f8fafc; }
+.rm-card:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.rm-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.rm-card-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+}
+.rm-status-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rm-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.rm-meta-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+.rm-meta-owner { background: #f1f5f9; color: var(--muted); }
+.rm-meta-quarter { background: #eff6ff; color: #1d4ed8; }
+.rm-card-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ─── Stasher Strategy ───────────────────────────────────────── */
+.ss-root { padding: 4px 0 40px; }
+@media (max-width: 639px) { .ss-root { padding-top: 2px; } }
+
+/* Page header */
+.ss-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.ss-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0 0 6px;
+  letter-spacing: -0.03em;
+}
+.ss-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+  max-width: 580px;
+  line-height: 1.6;
+}
+
+/* KPI card (top-right) */
+.ss-kpi-card {
+  background: var(--navy);
+  border-radius: 12px;
+  padding: 16px 22px;
+  color: #fff;
+  flex-shrink: 0;
+  min-width: 260px;
+}
+.ss-kpi-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.ss-kpi-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ss-kpi-value {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: #fff;
+}
+.ss-kpi-green { color: #34d399; }
+.ss-kpi-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ss-kpi-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+}
+.ss-kpi-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  flex-shrink: 0;
+}
+
+/* ── Chart panel ─────────────────────────────────────────────── */
+.ss-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 0;
+  overflow: hidden;
+}
+
+/* All rows share the same two-column layout:
+   [fixed label col] [flexible bar track col]
+   The label width is set as a CSS custom property so both columns snap. */
+.ss-row,
+.ss-header-row,
+.ss-pin-row,
+.ss-goal-header-row {
+  --ss-label-w: 300px;
+  display: flex;
+  align-items: stretch;
+}
+@media (max-width: 960px) {
+  .ss-row,
+  .ss-header-row,
+  .ss-pin-row,
+  .ss-goal-header-row { --ss-label-w: 180px; }
+}
+
+/* Label column */
+.ss-row-label {
+  width: var(--ss-label-w);
+  min-width: var(--ss-label-w);
+  flex-shrink: 0;
+  padding: 0 14px 0 20px;
+  display: flex;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.4;
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+
+/* Bar / track column */
+.ss-row-track {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+/* ── Quarter header row ─────────────────────── */
+.ss-header-row {
+  border-bottom: 1px solid var(--line);
+  background: #fafbfc;
+}
+.ss-header-spacer {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #94a3b8;
+}
+.ss-quarter-header {
+  height: 40px;
+  overflow: visible;
+}
+
+/* Each quarter marker is absolutely positioned over the track */
+.ss-q-marker {
+  position: absolute;
+  top: 0; bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.ss-q-marker:first-child { transform: translateX(0); align-items: flex-start; }
+.ss-q-marker:last-child  { transform: translateX(-100%); align-items: flex-end; }
+
+.ss-q-tick {
+  width: 1px;
+  height: 6px;
+  background: var(--line-strong);
+  flex-shrink: 0;
+}
+.ss-q-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+  margin-top: 3px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.ss-q-milestone .ss-q-label { color: var(--ink); font-weight: 800; }
+.ss-q-note {
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+/* ── Milestone pin row ──────────────────────── */
+.ss-pin-row {
+  border-bottom: 2px solid var(--line);
+}
+.ss-pin-track {
+  height: 44px;
+  background: #fafbfc;
+  overflow: visible;
+}
+.ss-pin-group {
+  position: absolute;
+  top: 0; bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  pointer-events: none;
+}
+.ss-pin-group:last-child { transform: translateX(-100%); }
+
+.ss-pin-rev {
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 2px 9px;
+  border-radius: 5px;
+  background: #00a969;
+  color: #fff;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.ss-pin-trough {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: #dc2626;
+  color: #fff;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* ── Goal header rows ───────────────────────── */
+.ss-goal-block { display: flex; flex-direction: column; }
+
+/* The goal header is a <button> — reset styles then add our own */
+.ss-goal-header-btn {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: #f8fafc;
+  border-top: 1px solid var(--line);
+  min-height: 44px;
+  transition: background 0.12s;
+}
+.ss-goal-header-btn:hover { background: #f1f5f9; }
+.ss-goal-header-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ss-goal-block:first-child .ss-goal-header-btn { border-top: none; }
+
+.ss-goal-label-cell {
+  gap: 10px;
+  padding: 10px 14px 10px 20px;
+  align-items: center;
+}
+.ss-goal-stripe {
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  align-self: center;
+}
+.ss-goal-heading {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  overflow: hidden;
+}
+.ss-goal-track {
+  border: none;
+  border-left: 1px solid var(--line);
+  padding: 0 16px;
+}
+.ss-goal-track-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+}
+.ss-goal-rev {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.ss-goal-rev-note {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.65;
+}
+.ss-goal-cta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ss-goal-count-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.ss-goal-view-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.ss-goal-header-btn:hover .ss-goal-view-btn { opacity: 1; }
+
+/* ── Sub-goal bar rows (also buttons) ───────── */
+.ss-row {
+  border-top: 1px solid var(--line);
+  min-height: 36px;
+}
+/* Reset button styles for clickable rows */
+.ss-row-btn {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.1s;
+}
+.ss-row-btn:hover { background: rgba(0,0,0,0.025); }
+.ss-row-btn:hover .ss-row-track { filter: brightness(0.97); }
+.ss-row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.ss-row-label {
+  font-size: 12px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  align-items: flex-start;
+  padding-right: 12px;
+  gap: 6px;
+  justify-content: space-between;
+}
+.ss-row-label-text { flex: 1; min-width: 0; }
+.ss-row-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 1px;
+}
+.ss-row-track {
+  overflow: hidden;
+  position: relative;
+}
+/* Hover hint that appears over the bar track */
+.ss-row-hover-hint {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: rgba(255,255,255,0.85);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+  white-space: nowrap;
+}
+.ss-row-btn:hover .ss-row-hover-hint { opacity: 1; }
+
+/* Gridlines */
+.ss-gridline {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(0,0,0,0.06);
+  pointer-events: none;
+}
+.ss-gridline-milestone { background: rgba(239, 68, 68, 0.3); }
+
+/* Effort segments */
+.ss-seg {
+  position: absolute;
+  top: 6px; bottom: 6px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* Separator between goals */
+.ss-goal-divider { height: 0; }
+
+/* ── Legend ──────────────────────────────────── */
+.ss-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  padding: 2px 0;
+}
+.ss-legend-head {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #94a3b8;
+  margin-right: 2px;
+}
+.ss-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ss-legend-swatch {
+  width: 22px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.ss-legend-dashed {
+  display: inline-block;
+  width: 18px;
+  border-top: 2px dashed;
+  flex-shrink: 0;
+}
+.ss-legend-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--line-strong);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* ── Goal/initiative drawer ──────────────────── */
+.ss-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 400;
+  animation: fadeIn 0.18s ease;
+}
+.ss-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 100vw);
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 32px rgba(15,23,42,0.12);
+  z-index: 401;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.ss-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 20px 20px 16px;
+  border-bottom: 2px solid;
+  flex-shrink: 0;
+}
+.ss-drawer-header-stripe {
+  width: 3px;
+  border-radius: 2px;
+  align-self: stretch;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+.ss-drawer-header-text { flex: 1; min-width: 0; }
+.ss-drawer-title {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+.ss-drawer-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+}
+.ss-drawer-close {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.ss-drawer-close:hover { background: #f1f5f9; color: var(--ink); }
+
+.ss-drawer-count-row {
+  padding: 10px 20px 8px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.ss-drawer-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.ss-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px 24px;
+}
+.ss-drawer-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.ss-drawer-group { margin-bottom: 16px; }
+.ss-drawer-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.ss-drawer-group-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ss-drawer-group-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-2);
+  flex: 1;
+}
+.ss-drawer-group-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.ss-drawer-none {
+  font-size: 12.5px;
+  color: #94a3b8;
+  padding: 8px 4px;
+  margin: 0;
+}
+
+/* Initiative cards inside drawer */
+.ss-drawer-card {
+  border: 1px solid var(--line);
+  border-left: 3px solid;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: var(--panel);
+  transition: background 0.1s;
+}
+.ss-drawer-card:last-child { margin-bottom: 0; }
+.ss-drawer-card:hover { background: #f8fafc; }
+
+.ss-drawer-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.ss-drawer-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.35;
+  flex: 1;
+}
+.ss-drawer-card-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ss-drawer-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.ss-drawer-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+.ss-drawer-chip-summary { background: #f1f5f9; color: var(--muted); }
+.ss-drawer-chip-quarter { background: #eff6ff; color: #1d4ed8; }
+.ss-drawer-chip-owner   { background: #f0fdf4; color: #15803d; }
+.ss-drawer-card-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ─── Product Roadmap — Gantt layout ────────────────────────────── */
+.gantt-root { padding: 4px 0 32px; }
+
+/* Publish status badge + button (editor header) */
+.rm-publish-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.rm-publish-status.live  { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.rm-publish-status.draft { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+.rm-publish-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.rm-publish-status.live .rm-publish-dot {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+/* Viewer placeholder when roadmap isn't published yet */
+.rm-unpublished {
+  text-align: center;
+  max-width: 520px;
+  margin: 48px auto;
+  padding: 48px 32px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.rm-unpublished-icon { font-size: 40px; margin-bottom: 14px; }
+.rm-unpublished-title {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0 0 10px;
+  letter-spacing: -0.02em;
+}
+.rm-unpublished-msg {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.65;
+  margin: 0;
+}
+
+.gantt-hint {
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-style: italic;
+  margin-left: auto;
+  align-self: center;
+  white-space: nowrap;
+}
+@media (max-width: 720px) { .gantt-hint { display: none; } }
+
+.gantt-table {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+}
+
+/* Column width (per month) — overridden per breakpoint */
+.gantt-root { --gantt-col-w: 150px; }
+
+/* Every row shares the same two-column flex layout. Width = label + N month cols.
+   Track grids set their own grid-template-columns inline based on month count. */
+.gantt-quarter-row,
+.gantt-header-row,
+.gantt-group-header,
+.gantt-row,
+.gantt-row-dragging {
+  display: flex;
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Label column — right border matches the track grid's cell separators */
+.gantt-label-cell {
+  width: 260px;
+  min-width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+}
+
+/* Track grid: month columns (template set inline) */
+.gantt-track-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(5, var(--gantt-col-w));
+  min-width: 0;
+}
+
+.gantt-cell {
+  border-left: 1px solid var(--line);
+  position: relative;
+  box-sizing: border-box;
+  cursor: default;
+}
+/* First cell shares border with label right — avoid doubling */
+.gantt-cell:first-child { border-left: none; }
+
+/* Quarter divider — heavier border at the start of each quarter (but not the very first) */
+.gantt-quarter-start { border-left: 2px solid var(--line-strong); }
+.gantt-cell.gantt-quarter-start:first-child { border-left: none; }
+
+/* ── Quarter section header (top tier) ── */
+.gantt-quarter-row {
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  height: 30px;
+}
+.gantt-quarter-corner {
+  background: #fff;
+}
+.gantt-quarter-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-left: 2px solid var(--line-strong);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  box-sizing: border-box;
+}
+.gantt-quarter-cell:first-child { border-left: none; }
+.gantt-quarter-current {
+  background: rgba(79, 70, 229, 0.06);
+  color: var(--accent);
+}
+
+/* "Now" indicator dot */
+.gantt-now-pip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ── Month header row (second tier) ── */
+.gantt-header-row {
+  background: #f8fafc;
+  border-bottom: 2px solid var(--line);
+  height: 34px;
+}
+.gantt-header-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.gantt-header-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+.gantt-q-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: inherit;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+.gantt-m-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* ── Group header row ── */
+.gantt-group-header {
+  height: 38px;
+  border-bottom: 1px solid var(--line-strong);
+  border-top: 2px solid var(--line-strong);
+}
+.gantt-group-header:first-of-type { border-top: none; }
+.gantt-group-header .gantt-label-cell {
+  gap: 8px;
+}
+.gantt-group-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+.gantt-goal-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.gantt-group-cell { background: inherit; }
+
+/* ── Initiative row ── */
+.gantt-row {
+  height: 44px;
+  border-bottom: 1px solid var(--line);
+  transition: background 0.1s;
+  background: var(--panel);
+}
+.gantt-row:last-child { border-bottom: none; }
+.gantt-row:hover { background: #f8fafc; }
+
+.gantt-row-dragging {
+  box-shadow: var(--shadow-md);
+  opacity: 0.95;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+/* Whole label cell is the reorder drag handle */
+.gantt-label-draggable { cursor: grab; }
+.gantt-label-draggable:active { cursor: grabbing; }
+
+.gantt-drag-grip {
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+  transition: color 0.1s;
+}
+.gantt-label-draggable:hover .gantt-drag-grip { color: var(--muted); }
+
+.gantt-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.gantt-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.gantt-row-name:hover { text-decoration: underline; color: var(--accent); }
+.gantt-owner-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: #f1f5f9;
+  border-radius: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: none;
+}
+@media (min-width: 900px) { .gantt-owner-chip { display: inline; } }
+
+/* Clickable cells — light hover on empty cells */
+.gantt-cell:not(.gantt-header-cell):not(.gantt-group-cell) {
+  cursor: pointer;
+}
+.gantt-cell:not(.gantt-header-cell):not(.gantt-group-cell):hover::after {
+  content: "";
+  position: absolute;
+  inset: 4px 2px;
+  border-radius: 5px;
+  background: rgba(79, 70, 229, 0.05);
+  pointer-events: none;
+}
+/* Read-only: empty cells aren't interactive; only bars open the detail modal */
+.gantt-readonly .gantt-cell:not(.gantt-cell-active) { cursor: default; }
+.gantt-readonly .gantt-cell:not(.gantt-cell-active):hover::after { display: none; }
+.gantt-readonly .gantt-cell-active { cursor: pointer; }
+
+/* ── Bar segments ── */
+.gantt-bar {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+/* Start segment: rounded left, flat right */
+.gantt-bar-start {
+  left: 3px;
+  right: -1px; /* bleeds into next cell */
+  border-radius: 6px 0 0 6px;
+}
+/* Middle segment: flat both sides, full width */
+.gantt-bar-mid {
+  left: -1px;
+  right: -1px;
+  border-radius: 0;
+}
+/* End segment: flat left, rounded right */
+.gantt-bar-end {
+  left: -1px;
+  right: 3px;
+  border-radius: 0 6px 6px 0;
+}
+/* Single-quarter bar: rounded all sides */
+.gantt-bar-single {
+  left: 3px;
+  right: 3px;
+  border-radius: 6px;
+}
+
+.gantt-row:hover .gantt-bar { filter: brightness(0.92); }
+
+.gantt-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  padding: 0 10px;
+  letter-spacing: -0.01em;
+  pointer-events: none;
+  user-select: none;
+}
+
+
+/* Resize handles — sit at the left/right edges of a bar */
+.gantt-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  cursor: ew-resize;
+  z-index: 3;
+  touch-action: none; /* allow pointer drag without scroll interference */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gantt-resize-handle::before {
+  content: "";
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.gantt-resize-right { right: -2px; }
+.gantt-resize-left  { left: -2px; }
+.gantt-row:hover .gantt-resize-handle::before { opacity: 0.45; }
+.gantt-resize-handle:hover::before { opacity: 0.9; }
+
+/* ── Roadmap initiative modal ── */
+.rmi-modal { max-width: 580px; }
+
+.rmi-body { padding: 0; }
+
+.rmi-section {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.rmi-section:last-child { border-bottom: none; }
+
+.rmi-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.rmi-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.rmi-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+@media (max-width: 540px) {
+  .rmi-grid-2, .rmi-grid-3 { grid-template-columns: 1fr; }
+}
+
+.rmi-error {
+  margin: 12px 24px;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.rmi-goal-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.rmi-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  flex-shrink: 0;
+}
+
+.rmi-section-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+/* Tablet: slightly narrower month columns */
+@media (max-width: 900px) {
+  .gantt-root { --gantt-col-w: 120px; }
+}
+
+/* Mobile: narrower label column and month columns */
+@media (max-width: 600px) {
+  .gantt-root { --gantt-col-w: 92px; }
+  .gantt-label-cell { width: 140px; min-width: 140px; padding: 0 8px; }
+  .gantt-group-name { font-size: 11px; }
+  .gantt-row-name   { font-size: 11.5px; }
+  .gantt-q-label    { font-size: 11px; }
+  .gantt-m-label    { font-size: 10.5px; }
+  .gantt-drag-grip  { display: none; }
+  .gantt-bar-label  { display: none; }
+  .gantt-owner-chip { display: none; }
+}
+
