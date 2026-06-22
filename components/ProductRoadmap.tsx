@@ -34,6 +34,28 @@ const QUARTER_MONTHS: Record<string, number[]> = {
 };
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// ── Timeline units ─────────────────────────────────────────────────────────
+// The timeline is measured in "half-month units" anchored at QUARTERS[0] month 0.
+// 1 month = 2 units; 1 quarter = 6 units. Resizing snaps to whole units (half-months).
+const UNITS_PER_MONTH = 2;
+const UNITS_PER_QUARTER = UNITS_PER_MONTH * 3; // 6
+
+function quarterToStartUnit(qIdx: number): number {
+  return qIdx * UNITS_PER_QUARTER;
+}
+
+// Resolve an initiative's [startUnit, endUnit) span, falling back to quarter fields
+// when fine-grained units aren't set.
+function spanUnitsOf(i: { startUnit: number | null; endUnit: number | null; quarter: string; endQuarter: string }): { start: number; end: number } | null {
+  if (i.startUnit != null && i.endUnit != null && i.endUnit > i.startUnit) {
+    return { start: i.startUnit, end: i.endUnit };
+  }
+  const sq = i.quarter ? QUARTER_IDX[i.quarter as Quarter] : undefined;
+  if (sq === undefined) return null;
+  const eq = i.endQuarter ? QUARTER_IDX[i.endQuarter as Quarter] : sq;
+  return { start: quarterToStartUnit(sq), end: quarterToStartUnit(eq) + UNITS_PER_QUARTER };
+}
+
 // A single month column in the timeline.
 interface MonthCol {
   monthIdx: number;   // 0-11
@@ -42,6 +64,7 @@ interface MonthCol {
   quarter: Quarter;   // owning quarter, e.g. "Q3 2026"
   quarterIdx: number; // index into QUARTERS
   isQuarterStart: boolean; // first month of its quarter within the visible window
+  startUnit: number;  // unit at this month's left edge
 }
 
 // Returns the index of the current or next quarter within QUARTERS (-1 if before range, clamped to last if after)
@@ -72,6 +95,7 @@ function buildVisibleMonths(): MonthCol[] {
     const year = parseInt(quarter.slice(3));   // 2026
     const months = QUARTER_MONTHS[qNum];
     const slice = fromStart ? months.slice(0, count) : months.slice(-count);
+    const quarterStartUnit = quarterToStartUnit(qi);
     return slice.map((m, i) => ({
       monthIdx: m,
       year,
@@ -79,6 +103,8 @@ function buildVisibleMonths(): MonthCol[] {
       quarter,
       quarterIdx: qi,
       isQuarterStart: i === 0,
+      // month i of this quarter (fromStart always true here) → quarterStart + i months
+      startUnit: quarterStartUnit + i * UNITS_PER_MONTH,
     }));
   }
 
@@ -165,11 +191,27 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
     if (!form.summary?.trim()) { setError("Summary / group is required."); return; }
     setBusy(true); setError(null);
     try {
+      // If the quarter selection changed in the modal, recompute the fine-grained
+      // units to match (full-quarter span) so the Gantt and modal stay consistent.
+      const payload: Partial<RoadmapInitiative> = { ...form };
+      const qChanged = form.quarter !== initiative.quarter || form.endQuarter !== initiative.endQuarter;
+      if (qChanged) {
+        if (form.quarter && form.quarter in QUARTER_IDX) {
+          const sq = QUARTER_IDX[form.quarter as Quarter];
+          const eq = form.endQuarter && form.endQuarter in QUARTER_IDX
+            ? QUARTER_IDX[form.endQuarter as Quarter] : sq;
+          payload.startUnit = quarterToStartUnit(sq);
+          payload.endUnit = quarterToStartUnit(eq) + UNITS_PER_QUARTER;
+        } else {
+          payload.startUnit = null;
+          payload.endUnit = null;
+        }
+      }
       const url = isNew ? "/api/roadmap-initiatives" : `/api/roadmap-initiatives/${initiative.id}`;
       const res = await fetch(url, {
         method: isNew ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
@@ -471,6 +513,8 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
 function GanttRow({
   initiative,
   months,
+  windowStartUnit,
+  windowEndUnit,
   onOpen,
   onSpanChange,
   readOnly,
@@ -481,59 +525,50 @@ function GanttRow({
 }: {
   initiative: RoadmapInitiative;
   months: MonthCol[];
+  windowStartUnit: number;
+  windowEndUnit: number;
   onOpen: () => void;
-  onSpanChange: (id: string, start: Quarter, end: Quarter) => void;
+  // Persist a fine-grained [startUnit, endUnit) span.
+  onSpanChange: (id: string, startUnit: number, endUnit: number) => void;
   readOnly: boolean;
-  // Resize preview is expressed in quarter indices (the data model unit).
+  // Live resize preview, expressed in units.
   resizePreview?: { start: number; end: number } | null;
   wasResizing: () => boolean;
   onResizeStart: (e: React.PointerEvent, id: string, side: "left" | "right") => void;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }) {
-  const siQ = initiative.quarter ? QUARTER_IDX[initiative.quarter as Quarter] : undefined;
-  const rawEiQ = initiative.endQuarter
-    ? QUARTER_IDX[initiative.endQuarter as Quarter]
-    : siQ;
-  // Active quarter span, accounting for live resize preview.
-  const startQ = resizePreview ? resizePreview.start : (siQ ?? -1);
-  const endQ   = resizePreview ? resizePreview.end   : (rawEiQ ?? startQ);
-
   const ss = STATUS_STYLES[initiative.status] ?? STATUS_STYLES["Planned"];
   const gc = goalColor(initiative);
 
-  // Translate the quarter span into the visible month-column range.
-  const firstMonthCol = startQ === -1 ? -1 : months.findIndex((m) => m.quarterIdx === startQ);
-  const lastMonthCol  = startQ === -1 ? -1 : (() => {
-    for (let i = months.length - 1; i >= 0; i--) {
-      if (months[i].quarterIdx <= endQ) return i;
-    }
-    return -1;
-  })();
-  const hasBar = firstMonthCol !== -1 && lastMonthCol !== -1 && lastMonthCol >= firstMonthCol;
+  // Resolve the bar's unit span (preview during drag, else stored).
+  const stored = spanUnitsOf(initiative);
+  const span = resizePreview ?? stored;
+  const windowUnits = windowEndUnit - windowStartUnit;
 
-  function handleCellClick(col: MonthCol) {
+  // Clip the span to the visible window and convert to % offsets.
+  let bar: { leftPct: number; widthPct: number; clipLeft: boolean; clipRight: boolean } | null = null;
+  if (span && span.end > windowStartUnit && span.start < windowEndUnit) {
+    const visStart = Math.max(span.start, windowStartUnit);
+    const visEnd   = Math.min(span.end, windowEndUnit);
+    bar = {
+      leftPct: ((visStart - windowStartUnit) / windowUnits) * 100,
+      widthPct: ((visEnd - visStart) / windowUnits) * 100,
+      clipLeft: span.start < windowStartUnit,
+      clipRight: span.end > windowEndUnit,
+    };
+  }
+
+  function handleTrackClick(e: React.MouseEvent<HTMLDivElement>) {
     if (wasResizing()) return; // ignore the click that trails a resize drag
-    const baseStart = siQ ?? -1;
-    const baseEnd   = rawEiQ ?? baseStart;
-    const qi = col.quarterIdx;
-    const insideBar = baseStart !== -1 && qi >= baseStart && qi <= baseEnd;
-
-    // In read-only, clicking inside a bar opens detail; empty cells do nothing.
-    if (readOnly) {
-      if (insideBar) onOpen();
-      return;
-    }
-
-    if (baseStart === -1) {
-      // No bar yet — place it on the clicked month's quarter
-      onSpanChange(initiative.id, QUARTERS[qi], QUARTERS[qi]);
-    } else if (insideBar) {
-      onOpen();
-    } else if (qi < baseStart) {
-      onSpanChange(initiative.id, QUARTERS[qi], QUARTERS[baseEnd]);
-    } else {
-      onSpanChange(initiative.id, QUARTERS[baseStart], QUARTERS[qi]);
-    }
+    // Clicking an existing bar opens detail; in read-only that's the only action.
+    if (span) { onOpen(); return; }
+    if (readOnly) return;
+    // No bar yet — place a 1-month bar snapped to the clicked half-month.
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = (e.clientX - rect.left) / rect.width;
+    const rawUnit = windowStartUnit + frac * windowUnits;
+    const startU = Math.round(rawUnit); // snap to half-month
+    onSpanChange(initiative.id, startU, startU + UNITS_PER_MONTH);
   }
 
   return (
@@ -558,90 +593,57 @@ function GanttRow({
         {initiative.owner && <span className="gantt-owner-chip">{initiative.owner}</span>}
       </div>
 
-      {/* Month cells */}
-      <div className="gantt-track-grid" style={{ gridTemplateColumns: `repeat(${months.length}, var(--gantt-col-w))` }}>
-        {months.map((col, i) => {
-          const inSpan   = hasBar && i >= firstMonthCol && i <= lastMonthCol;
-          const isStart  = hasBar && i === firstMonthCol;
-          const isEnd    = hasBar && i === lastMonthCol;
-          const isSingle = isStart && isEnd;
+      {/* Month track — grid for dividers, with an absolutely-positioned bar overlay */}
+      <div
+        className="gantt-track-grid gantt-track-overlay"
+        style={{ gridTemplateColumns: `repeat(${months.length}, var(--gantt-col-w))` }}
+        onClick={handleTrackClick}
+      >
+        {months.map((col) => (
+          <div
+            key={`${col.year}-${col.monthIdx}`}
+            className={`gantt-cell${col.isQuarterStart ? " gantt-quarter-start" : ""}`}
+          />
+        ))}
 
-          return (
-            <div
-              key={`${col.year}-${col.monthIdx}`}
-              className={[
-                "gantt-cell",
-                inSpan ? "gantt-cell-active" : "",
-                col.isQuarterStart ? "gantt-quarter-start" : "",
-              ].filter(Boolean).join(" ")}
-              onClick={() => handleCellClick(col)}
-              title={inSpan ? undefined : readOnly ? undefined : `Place in ${col.quarter}`}
-            >
-              {isStart && (
-                <div
-                  className={`gantt-bar ${isSingle ? "gantt-bar-single" : "gantt-bar-start"}`}
-                  style={{
-                    background: gc + "22",
-                    borderTop: `2px solid ${gc}66`,
-                    borderBottom: `2px solid ${gc}66`,
-                    borderLeft: `3px solid ${gc}`,
-                    borderRight: isSingle ? `3px solid ${gc}` : "none",
-                  }}
-                >
-                  {!readOnly && (
-                    <div
-                      className="gantt-resize-handle gantt-resize-left"
-                      onPointerDown={(e) => onResizeStart(e, initiative.id, "left")}
-                      title="Drag to change start"
-                      aria-label="Resize start"
-                    />
-                  )}
-                  <span className="gantt-bar-label" style={{ color: gc }}>
-                    {initiative.name}
-                  </span>
-                  {!readOnly && isSingle && (
-                    <div
-                      className="gantt-resize-handle gantt-resize-right"
-                      onPointerDown={(e) => onResizeStart(e, initiative.id, "right")}
-                      title="Drag to extend"
-                      aria-label="Resize end"
-                    />
-                  )}
-                </div>
-              )}
-              {inSpan && !isStart && !isEnd && (
-                <div
-                  className="gantt-bar gantt-bar-mid"
-                  style={{
-                    background: gc + "22",
-                    borderTop: `2px solid ${gc}66`,
-                    borderBottom: `2px solid ${gc}66`,
-                  }}
-                />
-              )}
-              {inSpan && !isStart && isEnd && (
-                <div
-                  className="gantt-bar gantt-bar-end"
-                  style={{
-                    background: gc + "22",
-                    borderTop: `2px solid ${gc}66`,
-                    borderBottom: `2px solid ${gc}66`,
-                    borderRight: `3px solid ${gc}`,
-                  }}
-                >
-                  {!readOnly && (
-                    <div
-                      className="gantt-resize-handle gantt-resize-right"
-                      onPointerDown={(e) => onResizeStart(e, initiative.id, "right")}
-                      title="Drag to resize"
-                      aria-label="Resize end"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {bar && (
+          <div
+            className="gantt-bar gantt-bar-abs"
+            style={{
+              left: `${bar.leftPct}%`,
+              width: `${bar.widthPct}%`,
+              background: gc + "22",
+              borderTop: `2px solid ${gc}66`,
+              borderBottom: `2px solid ${gc}66`,
+              borderLeft: bar.clipLeft ? "none" : `3px solid ${gc}`,
+              borderRight: bar.clipRight ? "none" : `3px solid ${gc}`,
+              borderTopLeftRadius: bar.clipLeft ? 0 : 6,
+              borderBottomLeftRadius: bar.clipLeft ? 0 : 6,
+              borderTopRightRadius: bar.clipRight ? 0 : 6,
+              borderBottomRightRadius: bar.clipRight ? 0 : 6,
+            }}
+          >
+            {!readOnly && !bar.clipLeft && (
+              <div
+                className="gantt-resize-handle gantt-resize-left"
+                onPointerDown={(e) => onResizeStart(e, initiative.id, "left")}
+                title="Drag to change start"
+                aria-label="Resize start"
+              />
+            )}
+            <span className="gantt-bar-label" style={{ color: gc }}>
+              {initiative.name}
+            </span>
+            {!readOnly && !bar.clipRight && (
+              <div
+                className="gantt-resize-handle gantt-resize-right"
+                onPointerDown={(e) => onResizeStart(e, initiative.id, "right")}
+                title="Drag to resize"
+                aria-label="Resize end"
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -672,14 +674,17 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const resizeRef = useRef<{
     id: string;
     side: "left" | "right";
-    fixedIdx: number;   // the quarter index that doesn't move
-    cellWidth: number;
+    fixedUnit: number;  // the unit edge that doesn't move
     trackLeft: number;  // px offset of the track grid's left edge
+    trackWidth: number; // px width of the full track grid
   } | null>(null);
   const ganttTableRef = useRef<HTMLDivElement>(null);
   const currentQIdx = currentQuarterIdx();
   // Visible month columns: 3 of this quarter + 2 of next. Stable for the session.
   const months = useMemo(() => buildVisibleMonths(), []);
+  // Unit range of the visible window (left edge of first month → right edge of last).
+  const windowStartUnit = months.length ? months[0].startUnit : 0;
+  const windowEndUnit = months.length ? months[months.length - 1].startUnit + UNITS_PER_MONTH : UNITS_PER_QUARTER;
 
   function flash(msg: string, err = false) {
     setToast({ msg, err });
@@ -722,46 +727,49 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
 
     const item = items.find((x) => x.id === id);
     if (!item) return;
+    const stored = spanUnitsOf(item);
+    if (!stored) return;
 
-    // Measure a real cell to get accurate column width (handles fixed-px columns + scroll).
-    const cellEl = ganttTableRef.current.querySelector<HTMLElement>(".gantt-track-grid .gantt-cell");
-    const trackEl = ganttTableRef.current.querySelector<HTMLElement>(".gantt-track-grid");
-    if (!cellEl || !trackEl) return;
-    const cellWidth = cellEl.getBoundingClientRect().width;
-    const trackLeft = trackEl.getBoundingClientRect().left;
+    const trackEl = ganttTableRef.current.querySelector<HTMLElement>(".gantt-track-overlay");
+    if (!trackEl) return;
+    const rect = trackEl.getBoundingClientRect();
+    const trackLeft = rect.left;
+    const trackWidth = rect.width;
 
-    const si = item.quarter ? QUARTER_IDX[item.quarter as Quarter] : 0;
-    const ei = item.endQuarter ? QUARTER_IDX[item.endQuarter as Quarter] : si;
-    const fixedIdx = side === "right" ? si : ei;
+    // The edge that stays anchored while the other follows the pointer.
+    const fixedUnit = side === "right" ? stored.start : stored.end;
 
-    resizeRef.current = { id, side, fixedIdx, cellWidth, trackLeft };
+    resizeRef.current = { id, side, fixedUnit, trackLeft, trackWidth };
     resizeMovedRef.current = false;
     setResizingId(id);
-    setResizePreview({ start: si, end: ei });
+    setResizePreview({ start: stored.start, end: stored.end });
 
     // Capture the pointer so we keep receiving moves even outside the handle.
     const target = e.currentTarget as HTMLElement;
     try { target.setPointerCapture(e.pointerId); } catch { /* noop */ }
 
-    // Pure helper — maps a pointer X to a month column, then to that month's
-    // quarter index (the data unit). Takes captured geometry so it never touches
-    // the (possibly already-nulled) resizeRef.
-    function computeIdx(clientX: number, tl: number, cw: number): number {
-      const rawCol = Math.floor((clientX - tl) / cw);
-      const col = Math.max(0, Math.min(months.length - 1, rawCol));
-      return months[col].quarterIdx;
+    // Map a pointer X to a unit, snapped to the nearest half-month (whole unit),
+    // clamped to the visible window.
+    function unitAt(clientX: number, tl: number, tw: number): number {
+      const frac = (clientX - tl) / tw;
+      const raw = windowStartUnit + frac * (windowEndUnit - windowStartUnit);
+      const snapped = Math.round(raw);
+      return Math.max(windowStartUnit, Math.min(windowEndUnit, snapped));
     }
 
     function onPointerMove(ev: PointerEvent) {
       if (!resizeRef.current) return;
-      const { fixedIdx: fixed, side: s, trackLeft: tl, cellWidth: cw } = resizeRef.current;
-      const idx = computeIdx(ev.clientX, tl, cw);
-      const newStart = s === "right" ? fixed : idx;
-      const newEnd   = s === "right" ? idx : fixed;
-      if (newStart <= newEnd) {
-        resizeMovedRef.current = true;
-        setResizePreview({ start: newStart, end: newEnd });
+      const { fixedUnit: fixed, side: s, trackLeft: tl, trackWidth: tw } = resizeRef.current;
+      const u = unitAt(ev.clientX, tl, tw);
+      let newStart = s === "right" ? fixed : u;
+      let newEnd   = s === "right" ? u : fixed;
+      // Keep a minimum width of one half-month.
+      if (newEnd - newStart < 1) {
+        if (s === "right") newEnd = newStart + 1;
+        else newStart = newEnd - 1;
       }
+      resizeMovedRef.current = true;
+      setResizePreview({ start: newStart, end: newEnd });
     }
 
     function onPointerUp(ev: PointerEvent) {
@@ -772,24 +780,25 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       setResizingId(null);
       setResizePreview(null);
       if (!ref) return;
-      const { fixedIdx: fixed, side: s, id: rid, trackLeft: tl, cellWidth: cw } = ref;
-      const idx = computeIdx(ev.clientX, tl, cw);
-      const finalStart = s === "right" ? fixed : idx;
-      const finalEnd   = s === "right" ? idx : fixed;
-      // Only persist if the span actually changed.
-      const orig = items.find((x) => x.id === rid);
-      const origStart = orig?.quarter ? QUARTER_IDX[orig.quarter as Quarter] : -1;
-      const origEnd = orig?.endQuarter ? QUARTER_IDX[orig.endQuarter as Quarter] : origStart;
-      if (finalStart <= finalEnd && (finalStart !== origStart || finalEnd !== origEnd)) {
-        onSpanChange(rid, QUARTERS[finalStart], QUARTERS[finalEnd]);
+      const { fixedUnit: fixed, side: s, id: rid, trackLeft: tl, trackWidth: tw } = ref;
+      const u = unitAt(ev.clientX, tl, tw);
+      let finalStart = s === "right" ? fixed : u;
+      let finalEnd   = s === "right" ? u : fixed;
+      if (finalEnd - finalStart < 1) {
+        if (s === "right") finalEnd = finalStart + 1;
+        else finalStart = finalEnd - 1;
       }
-      // Suppress the click that fires right after pointerup on the underlying cell.
+      const orig = spanUnitsOf(item!);
+      if (!orig || finalStart !== orig.start || finalEnd !== orig.end) {
+        onSpanChange(rid, finalStart, finalEnd);
+      }
+      // Suppress the click that fires right after pointerup on the underlying track.
       setTimeout(() => { resizeMovedRef.current = false; }, 0);
     }
 
     document.addEventListener("pointermove", onPointerMove);
     document.addEventListener("pointerup", onPointerUp);
-  }, [items, readOnly, months]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items, readOnly, windowStartUnit, windowEndUnit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function refresh() {
     setRefreshing(true);
@@ -821,16 +830,23 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     flash("Deleted");
   }
 
-  async function onSpanChange(id: string, start: Quarter, end: Quarter) {
+  // Persist a fine-grained unit span. Also derives quarter/endQuarter so other
+  // consumers (e.g. the strategy chart) that read quarters stay consistent.
+  async function onSpanChange(id: string, startUnit: number, endUnit: number) {
+    const startQ = Math.floor(startUnit / UNITS_PER_QUARTER);
+    // endUnit is exclusive; the last covered unit is endUnit-1.
+    const endQ = Math.floor((endUnit - 1) / UNITS_PER_QUARTER);
+    const quarter = QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, startQ))];
+    const endQuarter = endQ > startQ ? QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, endQ))] : "";
+    const patch = { startUnit, endUnit, quarter, endQuarter };
+
     // Optimistic update
-    setItems((prev) =>
-      prev.map((x) => (x.id === id ? { ...x, quarter: start, endQuarter: end !== start ? end : "" } : x))
-    );
+    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     try {
       const res = await fetch(`/api/roadmap-initiatives/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quarter: start, endQuarter: end !== start ? end : "" }),
+        body: JSON.stringify(patch),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
@@ -918,7 +934,8 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
 
   const newInitiative: RoadmapInitiative = {
     id: "__new__", summary: "", name: "", strategyGoal: "", status: "Planned",
-    description: "", owner: "", quarter: "", endQuarter: "", notes: "", comments: [], order: 999,
+    description: "", owner: "", quarter: "", endQuarter: "", startUnit: null, endUnit: null,
+    notes: "", comments: [], order: 999,
   };
   const modalInitiative = modal === "new" ? newInitiative : modal;
 
@@ -1072,14 +1089,11 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                         </span>
                       )}
                     </div>
-                    <div className="gantt-track-grid" style={{ gridTemplateColumns: `repeat(${months.length}, var(--gantt-col-w))` }}>
-                      {months.map((col) => (
-                        <div
-                          key={`${col.year}-${col.monthIdx}`}
-                          className={`gantt-cell gantt-group-cell${col.isQuarterStart ? " gantt-quarter-start" : ""}`}
-                        />
-                      ))}
-                    </div>
+                    {/* Plain colored band — no cell dividers in group headers */}
+                    <div
+                      className="gantt-group-track"
+                      style={{ width: `calc(${months.length} * var(--gantt-col-w))` }}
+                    />
                   </div>
 
                   {/* Droppable rows */}
@@ -1097,6 +1111,8 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                                 <GanttRow
                                   initiative={item}
                                   months={months}
+                                  windowStartUnit={windowStartUnit}
+                                  windowEndUnit={windowEndUnit}
                                   onOpen={() => setModal(item)}
                                   onSpanChange={onSpanChange}
                                   readOnly={readOnly}

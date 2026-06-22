@@ -48,6 +48,11 @@ export interface RoadmapInitiative {
   owner: string;
   quarter: string;        // start quarter, e.g. "Q3 2026"
   endQuarter: string;     // end quarter (inclusive); empty = same as quarter
+  // Fine-grained timeline position in half-months from the timeline anchor
+  // (Q3 2026 month 0 = unit 0; 1 month = 2 units; 1 quarter = 6 units).
+  // startUnit inclusive, endUnit exclusive. null = derive from quarter/endQuarter.
+  startUnit: number | null;
+  endUnit: number | null;
   notes: string;
   comments: RoadmapComment[];
   order: number;
@@ -82,6 +87,8 @@ function toRoadmapInitiative(rec: any): RoadmapInitiative {
     owner: f["Owner"] || "",
     quarter: f["Quarter"] || "",
     endQuarter: f["End Quarter"] || "",
+    startUnit: typeof f["Start Unit"] === "number" ? f["Start Unit"] : null,
+    endUnit: typeof f["End Unit"] === "number" ? f["End Unit"] : null,
     notes: f["Notes"] || "",
     comments: (() => {
       try { return f["Comments"] ? JSON.parse(f["Comments"]) : []; }
@@ -101,6 +108,8 @@ function toFields(input: Partial<RoadmapInitiative>): Record<string, any> {
   if (input.owner !== undefined) f["Owner"] = input.owner;
   if (input.quarter !== undefined) f["Quarter"] = input.quarter;
   if (input.endQuarter !== undefined) f["End Quarter"] = input.endQuarter || null;
+  if (input.startUnit !== undefined) f["Start Unit"] = input.startUnit;
+  if (input.endUnit !== undefined) f["End Unit"] = input.endUnit;
   if (input.notes !== undefined) f["Notes"] = input.notes;
   if (input.comments !== undefined) f["Comments"] = JSON.stringify(input.comments);
   if (input.order !== undefined) f["Order"] = input.order;
