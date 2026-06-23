@@ -114,19 +114,25 @@ function currentQuarterIdx(): number {
 // Total months covered by the quarter range (each quarter = 3 months).
 const TOTAL_MONTHS = QUARTERS.length * 3;
 
-// Zoom levels. `colWidth` is the px width of one month column; smaller = more
-// months visible at once. The timeline always spans the full range and scrolls;
-// the selector only changes how tightly months are packed.
+// Zoom levels. `months` is how many month columns should fit in the visible
+// timeline viewport at that zoom. The timeline always spans the full range and
+// scrolls; the selector just sets how many months are shown at once, so each
+// column's px width is derived from the measured viewport width ÷ months.
 const VIEW_OPTIONS = [
-  { id: "1M",  label: "1M",  colWidth: 520 },
-  { id: "3M",  label: "3M",  colWidth: 190 },
-  { id: "6M",  label: "6M",  colWidth: 110 },
-  { id: "12M", label: "12M", colWidth: 64 },
+  { id: "1M",  label: "1M",  months: 1 },
+  { id: "3M",  label: "3M",  months: 3 },
+  { id: "6M",  label: "6M",  months: 6 },
+  { id: "12M", label: "12M", months: 12 },
 ] as const;
 type ViewId = (typeof VIEW_OPTIONS)[number]["id"];
 
-function colWidthFor(view: ViewId): number {
-  return VIEW_OPTIONS.find((v) => v.id === view)?.colWidth ?? 110;
+// Fallback column widths used before the timeline width has been measured.
+const FALLBACK_COL_WIDTH: Record<ViewId, number> = {
+  "1M": 520, "3M": 190, "6M": 110, "12M": 64,
+};
+
+function monthsPerView(view: ViewId): number {
+  return VIEW_OPTIONS.find((v) => v.id === view)?.months ?? 6;
 }
 
 // Build the full set of month columns across the entire quarter range. The view
@@ -1322,7 +1328,30 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const currentQIdx = currentQuarterIdx();
   // The full timeline always exists; the view only changes column width (zoom).
   const months = useMemo(() => buildAllMonths(), []);
-  const colWidth = colWidthFor(view);
+
+  // Measure the visible timeline width (container minus the frozen label column)
+  // so each zoom shows exactly N months in the viewport regardless of screen size.
+  const [trackViewport, setTrackViewport] = useState(0);
+  useEffect(() => {
+    const el = ganttTableRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const labelCell = el.querySelector<HTMLElement>(".gantt-label-cell");
+      const labelW = labelCell ? labelCell.getBoundingClientRect().width : 0;
+      setTrackViewport(Math.max(0, el.clientWidth - labelW));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view]);
+
+  // Column width = visible track width ÷ months-per-view. Falls back to a sensible
+  // fixed width until the viewport has been measured.
+  const colWidth = trackViewport > 0
+    ? trackViewport / monthsPerView(view)
+    : FALLBACK_COL_WIDTH[view];
+
   // Unit range = the whole roadmap, so bars are positioned against fixed dates.
   const windowStartUnit = 0;
   const windowEndUnit = TOTAL_MONTHS * UNITS_PER_MONTH;
