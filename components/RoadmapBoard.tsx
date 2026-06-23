@@ -195,8 +195,8 @@ export type RoadmapBoardHandle = {
 
 const RoadmapBoard = forwardRef<
   RoadmapBoardHandle,
-  { initial: Initiative[]; readOnly?: boolean; canManageEditors?: boolean; inShell?: boolean }
->(function RoadmapBoard({ initial, readOnly = false, canManageEditors = false, inShell = false }, ref) {
+  { initial: Initiative[]; readOnly?: boolean; canManageEditors?: boolean; inShell?: boolean; mobile?: boolean }
+>(function RoadmapBoard({ initial, readOnly = false, canManageEditors = false, inShell = false, mobile = false }, ref) {
   const [items, setItems] = useState<Initiative[]>(initial);
   const [team, setTeam] = useState<string>("All");
   const [assignee, setAssignee] = useState<string>("All");
@@ -1162,7 +1162,7 @@ const RoadmapBoard = forwardRef<
               </div>
             </div>
 
-            <div className="slack-actions">
+            <div className="slack-actions" style={mobile ? { display: "none" } : undefined}>
               <span className="slack-actions-label">Share to Slack:</span>
               <div className="slack-btn-wrap" ref={slackDropdownRef}>
                 <button
@@ -1225,8 +1225,8 @@ const RoadmapBoard = forwardRef<
         )}
       </header>
 
-      {/* ── Dependency toolbar ─────────────────────────────── */}
-      {items.some((it) => (it.depLinks?.length ?? 0) > 0) && (
+      {/* ── Dependency toolbar (desktop only — arrows are board-only) ──── */}
+      {!mobile && items.some((it) => (it.depLinks?.length ?? 0) > 0) && (
         <div className="dep-toolbar">
           <button
             className={`dep-toggle ${showAllLinks ? "active" : ""}`}
@@ -1247,7 +1247,7 @@ const RoadmapBoard = forwardRef<
 
       {/* ── Board (snapshot region for Slack) ───────────────── */}
       <div className="board-wrap" ref={snapshotRef}>
-        <div className="board-title-bar">
+        <div className="board-title-bar" style={mobile ? { display: "none" } : undefined}>
           <div className="brand-lockup">
             <svg width="20" height="17" viewBox="0 0 122 104" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
               <path d="M105.793 26.3962H86.4293C85.253 13.2727 74.1686 2.95496 60.7769 2.95496C47.34 2.95496 36.3009 13.2727 35.1246 26.3962H15.7609C8.97452 26.3962 3.45496 31.9171 3.45496 38.7051V88.529C3.45496 95.3169 8.97452 100.838 15.7609 100.838H105.838C112.625 100.838 118.144 95.3169 118.144 88.529V38.7051C118.144 31.9171 112.579 26.3962 105.793 26.3962ZM49.8283 31.8266C51.1856 36.6234 55.5741 40.1079 60.7769 40.1079C65.9798 40.1079 70.3683 36.5782 71.7256 31.8266H80.8645C79.281 41.194 70.685 49.7016 61.6365 58.6618C61.3651 58.9333 61.0484 59.2048 60.7769 59.5216C60.5055 59.2501 60.1888 58.9785 59.9173 58.6618C50.8689 49.7016 42.2728 41.194 40.6894 31.8266H49.8283ZM54.8502 28.7493C54.8502 25.4911 57.5195 22.8212 60.7769 22.8212C64.0344 22.8212 66.7037 25.4911 66.7037 28.7493C66.7037 32.0076 64.0344 34.6775 60.7769 34.6775C57.5195 34.6775 54.8502 32.0076 54.8502 28.7493ZM56.117 62.5083C57.0218 63.4134 57.9719 64.3184 58.8768 65.2687C59.3744 65.7665 60.0983 66.0833 60.7769 66.0833C61.4556 66.0833 62.1795 65.8118 62.6771 65.2687C63.582 64.3637 64.532 63.4134 65.4369 62.5083C75.3902 52.6431 84.8458 43.2304 86.3388 31.8266H95.2968V95.4527H26.2571V31.8266H35.215C36.6628 43.2756 46.1184 52.6431 56.117 62.5083ZM60.7769 8.4306C71.1827 8.4306 79.8239 16.3047 80.955 26.4414H71.8613C70.7755 21.2825 66.206 17.436 60.7317 17.436C55.2574 17.436 50.6879 21.2825 49.6021 26.4414H40.5084C41.7299 16.3047 50.3712 8.4306 60.7769 8.4306ZM8.8388 88.5742V38.7051C8.8388 34.9038 11.9153 31.8266 15.7156 31.8266H20.828V95.4527H15.7156C11.9605 95.4527 8.8388 92.3755 8.8388 88.5742ZM112.715 88.5742C112.715 92.3755 109.639 95.4527 105.838 95.4527H100.726V31.8266H105.838C109.639 31.8266 112.715 34.9038 112.715 38.7051V88.5742Z" fill="#102A56"/>
@@ -1261,6 +1261,66 @@ const RoadmapBoard = forwardRef<
           </span>
         </div>
 
+        {mobile ? (
+          /* ── Mobile: single-column list grouped by timeframe ── */
+          <div className="wkm-list">
+            {TIMEFRAMES.map((tf) => {
+              const tfItems = filtered
+                .filter((i) => i.timeframe === tf)
+                .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+              return (
+                <div key={tf} className="wkm-group">
+                  <div className="wkm-group-header">
+                    <span className="wkm-group-pill" style={{ background: TIMEFRAME_ACCENT[tf] }} />
+                    <span className="wkm-group-name">{tf}</span>
+                    <span className="wkm-group-date">{weekRanges[tf]}</span>
+                    <span className="wkm-group-count">{tfItems.length}</span>
+                  </div>
+                  {tfItems.length === 0 ? (
+                    <div className="wkm-empty">Nothing here</div>
+                  ) : (
+                    tfItems.map((it) => {
+                      const pill = STATUS_PILL[it.status] ?? STATUS_PILL["To Do"];
+                      const owner = primaryAssigneeOf(it.primaryAssignees);
+                      const ac = colorForAssignee(owner, colourMap);
+                      const assignees = it.primaryAssignees
+                        ? it.primaryAssignees.split(",").map((a) => a.trim()).filter(Boolean)
+                        : [];
+                      return (
+                        <button
+                          key={it.id}
+                          className="wkm-card"
+                          style={{ borderLeftColor: ac.accent }}
+                          onClick={() => setSelected(it)}
+                        >
+                          <div className="wkm-card-top">
+                            {it.priority === "High" && <span className="wkm-prio" aria-label="High priority">!</span>}
+                            <span className="wkm-card-name">{it.name}</span>
+                            <span className="wkm-status" style={{ background: pill.bg, color: pill.fg, borderColor: pill.border }}>
+                              {it.status}
+                            </span>
+                          </div>
+                          <div className="wkm-card-meta">
+                            {assignees.map((a) => {
+                              const c = colorForAssignee(a, colourMap);
+                              return (
+                                <span key={a} className="wkm-assignee" style={{ background: c.bg, color: c.fg, borderColor: c.border }}>
+                                  {a}
+                                </span>
+                              );
+                            })}
+                            <span className="wkm-chip wkm-chip-area">{it.spansPods ? `${it.area} · all pods` : it.pod || it.area}</span>
+                            {it.tShirtSize && <span className="wkm-chip wkm-chip-size">{it.tShirtSize}</span>}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
         <div className={`board ${hoveredId ? "tracing" : ""}`} ref={boardRef} style={{ position: "relative" }}>
           {/* Dependency arrows overlay */}
           {(showAllLinks || hoveredId !== null) && (
@@ -1291,9 +1351,10 @@ const RoadmapBoard = forwardRef<
 
           {renderBoard()}
         </div>
+        )}
 
         {/* Assignee colour key — cards are coloured by their primary assignee */}
-        {ownerKey.length > 0 && (
+        {ownerKey.length > 0 && !mobile && (
           <div className="legend">
             <strong style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginRight: 4 }}>
               Assignee:

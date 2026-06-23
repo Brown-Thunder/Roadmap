@@ -10,6 +10,7 @@ import {
 } from "@/lib/types";
 import InitiativeModal from "./InitiativeModal";
 import UserMenu from "./UserMenu";
+import { useIsNarrow } from "@/lib/useViewMode";
 
 const STATUS_PILL: Record<string, { bg: string; fg: string; border: string }> = {
   "In Flight": { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" },
@@ -51,6 +52,10 @@ export default function HistoryView({ initial }: { initial: Initiative[] }) {
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<ViewMode>("timeline");
+  const isNarrow = useIsNarrow();
+  // The calendar grid is a desktop layout — on phones force the (list-style)
+  // timeline view, which reads naturally on a narrow screen.
+  const effectiveView: ViewMode = isNarrow ? "timeline" : view;
   const [calCursor, setCalCursor] = useState<{ y: number; m: number } | null>(null);
   const [selected, setSelected] = useState<Initiative | null>(null);
   const [colourMap, setColourMap] = useState<Record<string, AssigneeColor>>({});
@@ -203,24 +208,27 @@ export default function HistoryView({ initial }: { initial: Initiative[] }) {
             )}
           </div>
 
-          <div className="view-tabs" role="tablist">
-            <button
-              role="tab"
-              aria-selected={view === "timeline"}
-              className={`view-tab ${view === "timeline" ? "active" : ""}`}
-              onClick={() => setView("timeline")}
-            >
-              ☰ Timeline
-            </button>
-            <button
-              role="tab"
-              aria-selected={view === "calendar"}
-              className={`view-tab ${view === "calendar" ? "active" : ""}`}
-              onClick={() => setView("calendar")}
-            >
-              ▦ Calendar
-            </button>
-          </div>
+          {/* Calendar is desktop-only; on phones the timeline list is the view */}
+          {!isNarrow && (
+            <div className="view-tabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={view === "timeline"}
+                className={`view-tab ${view === "timeline" ? "active" : ""}`}
+                onClick={() => setView("timeline")}
+              >
+                ☰ Timeline
+              </button>
+              <button
+                role="tab"
+                aria-selected={view === "calendar"}
+                className={`view-tab ${view === "calendar" ? "active" : ""}`}
+                onClick={() => setView("calendar")}
+              >
+                ▦ Calendar
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -231,7 +239,7 @@ export default function HistoryView({ initial }: { initial: Initiative[] }) {
             ? <>No completed initiatives match “{query}”.</>
             : <>Nothing completed yet. Mark an initiative complete to see it here.</>}
         </div>
-      ) : view === "timeline" ? (
+      ) : effectiveView === "timeline" ? (
         <TimelineView
           grouped={grouped}
           editingId={editingId}

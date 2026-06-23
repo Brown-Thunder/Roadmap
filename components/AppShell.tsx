@@ -6,6 +6,7 @@ import ProductRoadmap from "./ProductRoadmap";
 import StasherStrategy from "./StasherStrategy";
 import { Initiative } from "@/lib/types";
 import { RoadmapInitiative } from "@/lib/roadmap-initiatives";
+import { useViewMode } from "@/lib/useViewMode";
 
 export type AppTab = "weekly" | "roadmap" | "strategy";
 
@@ -33,6 +34,8 @@ export default function AppShell({
   defaultTab = "weekly",
 }: Props) {
   const [activeTab, setActiveTab] = useState<AppTab>(defaultTab);
+  const { mode, isNarrow, override, setOverride } = useViewMode();
+  const mobile = mode === "mobile";
 
   // Viewers only see roadmap initiatives (and their links from the strategy chart)
   // once an editor has published the roadmap. Editors always see them.
@@ -86,6 +89,22 @@ export default function AppShell({
         </div>
       </nav>
 
+      {/* On phones, let the user flip between the mobile-optimised layout and the
+          full desktop layout. Only shown when the viewport is actually narrow. */}
+      {isNarrow && (
+        <div className="view-mode-bar">
+          <span className="view-mode-label">
+            {mobile ? "Mobile view" : "Desktop view"}
+          </span>
+          <button
+            className="view-mode-toggle"
+            onClick={() => setOverride(mobile ? "desktop" : "mobile")}
+          >
+            {mobile ? "Switch to desktop view" : "Switch to mobile view"}
+          </button>
+        </div>
+      )}
+
       {/* ── Tab panels ───────────────────────────────────── */}
       <div style={activeTab !== "weekly" ? { display: "none" } : {}}>
         <RoadmapBoard
@@ -93,17 +112,19 @@ export default function AppShell({
           canManageEditors={canManageEditors}
           readOnly={readOnly}
           inShell={true}
+          mobile={mobile}
         />
       </div>
 
       <div style={activeTab !== "roadmap" ? { display: "none" } : {}}>
-        <ProductRoadmap initial={roadmapInitiatives} readOnly={readOnly} published={roadmapPublished} />
+        <ProductRoadmap initial={roadmapInitiatives} readOnly={readOnly} published={roadmapPublished} mobile={mobile} />
       </div>
 
       <div style={activeTab !== "strategy" ? { display: "none" } : {}}>
         <StasherStrategy
           roadmapInitiatives={strategyRoadmapInitiatives}
           onNavigateToRoadmap={() => setActiveTab("roadmap")}
+          mobile={mobile}
         />
       </div>
     </div>

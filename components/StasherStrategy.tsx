@@ -289,9 +289,10 @@ function BarRow({
 interface Props {
   roadmapInitiatives: RoadmapInitiative[];
   onNavigateToRoadmap?: () => void;
+  mobile?: boolean;
 }
 
-export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadmap }: Props) {
+export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadmap, mobile = false }: Props) {
   const [drawer, setDrawer] = useState<DrawerScope | null>(null);
 
   function countFor(id: string) {
@@ -299,6 +300,90 @@ export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadma
   }
   function countForGoal(goalId: string) {
     return roadmapInitiatives.filter((r) => (r.strategyGoal || "").startsWith(goalId + ".")).length;
+  }
+
+  // ── Mobile: stacked goal cards instead of the crushed timeline chart ──
+  if (mobile) {
+    return (
+      <div className="ss-root">
+        <div className="ssm-header">
+          <h1 className="ss-title">Stasher Strategy</h1>
+          <p className="ssm-subtitle">
+            Three goals for the next 18 months. Tap a goal or objective to see its linked roadmap initiatives.
+          </p>
+          <div className="ssm-kpi">
+            <div className="ssm-kpi-item">
+              <span className="ssm-kpi-value">£5.0M</span>
+              <span className="ssm-kpi-sub">end-2026</span>
+            </div>
+            <span className="ssm-kpi-arrow">→</span>
+            <div className="ssm-kpi-item">
+              <span className="ssm-kpi-value ss-kpi-green">£8.0M</span>
+              <span className="ssm-kpi-sub">end-2027</span>
+            </div>
+            <span className="ssm-kpi-note">Net revenue · profitable from Q2 2027</span>
+          </div>
+        </div>
+
+        <div className="ssm-goals">
+          {GOALS.map((goal) => {
+            const goalCount = countForGoal(goal.id);
+            return (
+              <div key={goal.id} className="ssm-goal" style={{ borderColor: goal.border }}>
+                <button
+                  className="ssm-goal-head"
+                  style={{ background: goal.bg }}
+                  onClick={() => setDrawer({ type: "goal", goalId: goal.id })}
+                >
+                  <span className="ssm-goal-stripe" style={{ background: goal.color }} />
+                  <span className="ssm-goal-text">
+                    <span className="ssm-goal-title" style={{ color: goal.color }}>{goal.shortLabel}</span>
+                    <span className="ssm-goal-rev">
+                      {goal.revenue}{goal.revenueNote ? ` · ${goal.revenueNote}` : ""}
+                    </span>
+                  </span>
+                  {goalCount > 0 && (
+                    <span className="ssm-goal-count" style={{ background: goal.color + "20", color: goal.color }}>
+                      {goalCount}
+                    </span>
+                  )}
+                </button>
+                <div className="ssm-subgoals">
+                  {goal.subGoals.map((sg) => {
+                    const c = countFor(sg.id);
+                    return (
+                      <button
+                        key={sg.id}
+                        className="ssm-subgoal"
+                        onClick={() => setDrawer({ type: "subgoal", subGoalId: sg.id })}
+                      >
+                        <span className="ssm-subgoal-label">{sg.label.trim()}</span>
+                        {c > 0 && (
+                          <span className="ssm-subgoal-count" style={{ color: goal.color }}>
+                            {c} linked
+                          </span>
+                        )}
+                        <svg className="ssm-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {drawer && (
+          <GoalDrawer
+            scope={drawer}
+            roadmapInitiatives={roadmapInitiatives}
+            onClose={() => setDrawer(null)}
+          />
+        )}
+      </div>
+    );
   }
 
   return (

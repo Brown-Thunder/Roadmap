@@ -302,6 +302,104 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 
 .board { position: relative; }
 
+/* ─── Weekly Priorities — mobile list view ─────────────────────── */
+.wkm-list { display: flex; flex-direction: column; gap: 18px; }
+.wkm-group {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  background: var(--panel);
+}
+.wkm-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: #fafbfc;
+  border-bottom: 1px solid var(--line);
+}
+.wkm-group-pill { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.wkm-group-name { font-size: 13.5px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+.wkm-group-date { font-size: 11.5px; color: var(--muted); }
+.wkm-group-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border-radius: 999px;
+  min-width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+}
+.wkm-empty { padding: 16px 14px; font-size: 13px; color: #94a3b8; font-style: italic; }
+.wkm-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: var(--panel);
+  border: none;
+  border-top: 1px solid var(--line);
+  border-left: 4px solid #94a3b8;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.wkm-group .wkm-card:first-of-type { border-top: none; }
+.wkm-card:active { background: #f8fafc; }
+.wkm-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.wkm-prio {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  font-size: 12px; font-weight: 900;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.wkm-card-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.wkm-status {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.wkm-card-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.wkm-assignee {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+}
+.wkm-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 7px;
+}
+.wkm-chip-area { background: #f1f5f9; color: var(--muted); }
+.wkm-chip-size { background: #ede9fe; color: #5b21b6; font-weight: 800; }
+
 /* Column header row */
 .grid {
   display: grid;
@@ -1778,6 +1876,71 @@ a.link:hover { text-decoration: underline; }
   padding: 0;
 }
 
+/* ─── Mobile / desktop view toggle (phones only) ──────────────── */
+.view-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+.view-mode-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.view-mode-toggle {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  padding: 8px 6px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.view-mode-toggle:active { opacity: 0.6; }
+
+/* ─── Cross-cutting touch optimisations ───────────────────────── */
+@media (hover: none) {
+  /* Hover-revealed affordances are invisible on touch — show them. */
+  .gantt-resize-handle::before,
+  .gantt-drag-grip,
+  .resize-handle,
+  .area-drag-handle,
+  .lane-rename-btn,
+  .ss-goal-view-btn,
+  .ss-row-hover-hint { opacity: 1 !important; }
+
+  /* Comfortable tap targets on touch devices. */
+  .btn,
+  .icon-btn,
+  .rm-view-btn,
+  .view-tab,
+  .btn-link,
+  .modal-close-x { min-height: 44px; }
+  .modal-close-x { min-width: 44px; }
+}
+
+/* Prevent iOS zoom-on-focus: form fields must be ≥16px. */
+@media (max-width: 768px) {
+  .input, .select, .styled-select, .textarea,
+  .field input, .field textarea,
+  .comment-author-input, .comment-textarea,
+  .history-search input,
+  input[type="text"], input[type="email"], input[type="date"], textarea, select {
+    font-size: 16px;
+  }
+}
+
 /* ─── Product Roadmap ────────────────────────────────────────── */
 .rm-root { padding: 4px 0 32px; }
 
@@ -2580,6 +2743,86 @@ a.link:hover { text-decoration: underline; }
   overflow: hidden;
 }
 
+/* ─── Stasher Strategy — mobile stacked cards ─────────────────── */
+.ssm-header { padding: 4px 0 8px; }
+.ssm-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 6px 0 0;
+}
+.ssm-kpi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--navy);
+  border-radius: 12px;
+  color: #fff;
+}
+.ssm-kpi-item { display: flex; flex-direction: column; }
+.ssm-kpi-value { font-size: 20px; font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; }
+.ssm-kpi-sub { font-size: 10.5px; font-weight: 600; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.04em; }
+.ssm-kpi-arrow { color: rgba(255,255,255,0.5); font-size: 18px; }
+.ssm-kpi-note { flex-basis: 100%; font-size: 11.5px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+
+.ssm-goals { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.ssm-goal {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  background: var(--panel);
+}
+.ssm-goal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  border: none;
+  padding: 13px 14px;
+  cursor: pointer;
+}
+.ssm-goal-stripe { width: 4px; align-self: stretch; border-radius: 2px; flex-shrink: 0; }
+.ssm-goal-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ssm-goal-title { font-size: 14px; font-weight: 800; letter-spacing: -0.01em; }
+.ssm-goal-rev { font-size: 12px; font-weight: 600; color: var(--muted); }
+.ssm-goal-count {
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ssm-subgoals { display: flex; flex-direction: column; }
+.ssm-subgoal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: var(--panel);
+  border: none;
+  border-top: 1px solid var(--line);
+  padding: 13px 14px;
+  cursor: pointer;
+  min-height: 48px;
+}
+.ssm-subgoal:active { background: #f8fafc; }
+.ssm-subgoal-label { font-size: 13px; font-weight: 600; color: var(--ink-2); line-height: 1.35; flex: 1; min-width: 0; }
+.ssm-subgoal-count { font-size: 11.5px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.ssm-chevron { color: #cbd5e1; flex-shrink: 0; }
+
 /* ─── Product Roadmap — Gantt layout ────────────────────────────── */
 .gantt-root { padding: 4px 0 32px; }
 
@@ -2600,6 +2843,70 @@ a.link:hover { text-decoration: underline; }
 .rm-publish-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .rm-publish-status.live .rm-publish-dot {
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+/* Snapshot button + dropdown menu */
+.rm-snap-wrap { position: relative; }
+.rm-snap-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.rm-snap-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+}
+.rm-snap-item {
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 9px 11px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.rm-snap-item:hover { background: #f1f5f9; }
+
+/* Timeline window switcher (segmented control) */
+.rm-view-switch {
+  display: inline-flex;
+  background: #f1f5f9;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 2px;
+  gap: 2px;
+}
+.rm-view-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, box-shadow 0.1s;
+}
+.rm-view-btn:hover { color: var(--ink); }
+.rm-view-btn.active {
+  background: var(--panel);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Viewer placeholder when roadmap isn't published yet */
@@ -2662,7 +2969,8 @@ a.link:hover { text-decoration: underline; }
   min-width: 100%;
 }
 
-/* Label column — right border matches the track grid's cell separators */
+/* Label column — frozen to the left so names stay visible while the timeline
+   scrolls. Right border matches the track grid's cell separators. */
 .gantt-label-cell {
   width: 260px;
   min-width: 260px;
@@ -2674,6 +2982,10 @@ a.link:hover { text-decoration: underline; }
   box-sizing: border-box;
   overflow: hidden;
   border-right: 1px solid var(--line);
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  background: var(--panel);
 }
 
 /* Track grid: month columns (template set inline) */
@@ -2705,12 +3017,11 @@ a.link:hover { text-decoration: underline; }
 }
 .gantt-quarter-corner {
   background: #fff;
+  z-index: 6; /* above sticky quarter labels */
 }
 .gantt-quarter-cell {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
   border-left: 2px solid var(--line-strong);
   font-size: 12px;
   font-weight: 800;
@@ -2719,9 +3030,22 @@ a.link:hover { text-decoration: underline; }
   box-sizing: border-box;
 }
 .gantt-quarter-cell:first-child { border-left: none; }
-.gantt-quarter-current {
-  background: rgba(79, 70, 229, 0.06);
-  color: var(--accent);
+.gantt-quarter-current { color: var(--accent); }
+
+/* Label pins just past the frozen label column while its quarter block is in
+   view, then scrolls away as the next quarter takes over. 260px = label width,
+   plus a gap so it isn't flush against the column border. */
+.gantt-q-label-sticky {
+  position: sticky;
+  left: 260px; /* = frozen label-column width; the padding adds the visible gap */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  /* Offset from the left edge (cell border when in view, frozen column when
+     pinned) so every quarter label has the same gap from its border. */
+  padding-left: 24px;
+  padding-right: 12px;
 }
 
 /* "Now" indicator dot */
@@ -2747,6 +3071,8 @@ a.link:hover { text-decoration: underline; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
+  background: #f8fafc; /* match the month-header row */
+  z-index: 6;          /* above month cells when scrolled */
 }
 .gantt-header-cell {
   display: flex;
@@ -2778,6 +3104,7 @@ a.link:hover { text-decoration: underline; }
 .gantt-group-header .gantt-label-cell {
   gap: 8px;
   border-right: none; /* clean band — no divider between label and track */
+  background: inherit; /* show the group's colored band, not the panel bg */
 }
 .gantt-group-name {
   font-size: 12.5px;
@@ -2925,6 +3252,84 @@ a.link:hover { text-decoration: underline; }
 .gantt-row:hover .gantt-resize-handle::before { opacity: 0.45; }
 .gantt-resize-handle:hover::before { opacity: 0.9; }
 
+/* ── Product Roadmap — mobile list view ── */
+.rml-list { display: flex; flex-direction: column; gap: 18px; }
+.rml-group {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  background: var(--panel);
+}
+.rml-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  font-weight: 800;
+}
+.rml-group-name {
+  font-size: 13.5px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.rml-goal-badge {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.rml-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  background: var(--panel);
+  border: none;
+  border-top: 1px solid var(--line);
+  border-left: 4px solid #cbd5e1;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+.rml-card:active { background: #f8fafc; }
+.rml-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.rml-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+}
+.rml-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rml-status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.rml-card-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.rml-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 7px;
+}
+.rml-chip-time  { background: #eef2ff; color: #3730a3; }
+.rml-chip-owner { background: #f1f5f9; color: var(--muted); }
+
 /* ── Roadmap initiative modal ── */
 .rmi-modal { max-width: 580px; }
 
@@ -2997,21 +3402,15 @@ a.link:hover { text-decoration: underline; }
   letter-spacing: 0.07em;
 }
 
-/* Tablet: slightly narrower month columns */
-@media (max-width: 900px) {
-  .gantt-root { --gantt-col-w: 120px; }
-}
-
-/* Mobile: narrower label column and month columns */
+/* Mobile: narrower label column (column width is driven by the zoom switcher). */
 @media (max-width: 600px) {
-  .gantt-root { --gantt-col-w: 92px; }
   .gantt-label-cell { width: 140px; min-width: 140px; padding: 0 8px; }
+  .gantt-q-label-sticky { left: 140px; padding-left: 16px; } /* = mobile label col width */
   .gantt-group-name { font-size: 11px; }
   .gantt-row-name   { font-size: 11.5px; }
   .gantt-q-label    { font-size: 11px; }
   .gantt-m-label    { font-size: 10.5px; }
   .gantt-drag-grip  { display: none; }
-  .gantt-bar-label  { display: none; }
   .gantt-owner-chip { display: none; }
 }
 
