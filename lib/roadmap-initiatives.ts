@@ -12,6 +12,9 @@
 //  Start Unit      (Number)             — fine-grained half-month offset
 //  End Unit        (Number)             — fine-grained half-month offset (exclusive)
 //  Main Bar Label  (Single line text)   — primary bar / workstream label (blank = use Name)
+//  Main Bar Description       (Long text)        — the main workstream's own description
+//  Main Bar North Star Metric (Single line text) — the main workstream's own north star
+//  Main Bar Success Metrics   (Long text)        — the main workstream's own success metrics
 //  Sub Bars        (Long text)          — JSON array of RoadmapSubBar
 //  North Star Metric (Single line text) — headline metric this initiative moves
 //  Success Metrics (Long text)          — how success will be tracked
@@ -91,8 +94,12 @@ export interface RoadmapInitiative {
   // startUnit inclusive, endUnit exclusive. null = derive from quarter/endQuarter.
   startUnit: number | null;
   endUnit: number | null;
-  // Label for the primary bar / workstream. Empty = fall back to `name`.
-  mainBarLabel: string;
+  // The initiative's own bar is itself a workstream. Its label/description/metrics
+  // are independent of the initiative-level description/metrics below.
+  mainBarLabel: string;          // empty = fall back to `name`
+  mainBarDescription: string;
+  mainBarNorthStarMetric: string;
+  mainBarSuccessMetrics: string;
   // Additional bars on the same row (e.g. separate App / Web timelines or V2, V3).
   subBars: RoadmapSubBar[];
   northStarMetric: string;   // single headline metric this initiative moves
@@ -135,6 +142,9 @@ function toRoadmapInitiative(rec: any): RoadmapInitiative {
     endUnit: typeof f["End Unit"] === "number" ? f["End Unit"] : null,
     team: (f["Team"] as RoadmapTeam) || "",
     mainBarLabel: f["Main Bar Label"] || "",
+    mainBarDescription: f["Main Bar Description"] || "",
+    mainBarNorthStarMetric: f["Main Bar North Star Metric"] || "",
+    mainBarSuccessMetrics: f["Main Bar Success Metrics"] || "",
     subBars: (() => {
       try { return f["Sub Bars"] ? JSON.parse(f["Sub Bars"]) : []; }
       catch { return []; }
@@ -164,6 +174,9 @@ function toFields(input: Partial<RoadmapInitiative>): Record<string, any> {
   if (input.startUnit !== undefined) f["Start Unit"] = input.startUnit;
   if (input.endUnit !== undefined) f["End Unit"] = input.endUnit;
   if (input.mainBarLabel !== undefined) f["Main Bar Label"] = input.mainBarLabel;
+  if (input.mainBarDescription !== undefined) f["Main Bar Description"] = input.mainBarDescription;
+  if (input.mainBarNorthStarMetric !== undefined) f["Main Bar North Star Metric"] = input.mainBarNorthStarMetric;
+  if (input.mainBarSuccessMetrics !== undefined) f["Main Bar Success Metrics"] = input.mainBarSuccessMetrics;
   if (input.subBars !== undefined) f["Sub Bars"] = JSON.stringify(input.subBars);
   if (input.northStarMetric !== undefined) f["North Star Metric"] = input.northStarMetric;
   if (input.successMetrics !== undefined) f["Success Metrics"] = input.successMetrics;

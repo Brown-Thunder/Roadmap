@@ -1490,7 +1490,7 @@ a.link:hover { text-decoration: underline; }
   position: absolute; top: calc(100% + 8px); right: 0;
   width: 240px; background: var(--panel);
   border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow-lg); z-index: 200;
+  box-shadow: var(--shadow-lg); z-index: 400;
   animation: scaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: top right;
   overflow: hidden;
@@ -1524,7 +1524,7 @@ a.link:hover { text-decoration: underline; }
   width: 100%; padding: 10px 14px;
   border: none; background: transparent; cursor: pointer;
   font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink);
-  text-align: left; transition: background 0.1s, color 0.1s;
+  text-align: left; text-decoration: none; transition: background 0.1s, color 0.1s;
 }
 .um-item:hover { background: #f8fafc; }
 .um-item-danger { color: #b91c1c; }

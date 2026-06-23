@@ -1119,7 +1119,8 @@ const RoadmapBoard = forwardRef<
 
           <nav className="topbar-actions">
             <Link href="/history" className="btn btn-soft">History</Link>
-            {canManageEditors && (
+            {/* Manage editors moved to the avatar dropdown in the shared header. */}
+            {!inShell && canManageEditors && (
               <Link href="/admin" className="btn btn-soft">Manage editors</Link>
             )}
             <button
@@ -1136,9 +1137,12 @@ const RoadmapBoard = forwardRef<
                 + Add initiative
               </button>
             )}
-            <div className="topbar-user">
-              <UserMenu />
-            </div>
+            {/* Avatar moved to the top-right of the shared header. */}
+            {!inShell && (
+              <div className="topbar-user">
+                <UserMenu />
+              </div>
+            )}
           </nav>
         </div>
 

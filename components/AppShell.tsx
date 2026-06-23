@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import RoadmapBoard from "./RoadmapBoard";
 import ProductRoadmap from "./ProductRoadmap";
 import StasherStrategy from "./StasherStrategy";
+import UserMenu from "./UserMenu";
 import { Initiative } from "@/lib/types";
 import { RoadmapInitiative } from "@/lib/roadmap-initiatives";
 import { useViewMode } from "@/lib/useViewMode";
@@ -15,6 +16,10 @@ const TABS: { id: AppTab; label: string; shortLabel: string }[] = [
   { id: "roadmap",  label: "Product Roadmap",   shortLabel: "Roadmap" },
   { id: "strategy", label: "Stasher Strategy",  shortLabel: "Strategy" },
 ];
+
+// Persist the active tab so a refresh keeps the user where they were.
+const TAB_STORAGE_KEY = "pulse.activeTab";
+const VALID_TABS: AppTab[] = ["weekly", "roadmap", "strategy"];
 
 interface Props {
   initiatives: Initiative[];
@@ -36,6 +41,20 @@ export default function AppShell({
   const [activeTab, setActiveTab] = useState<AppTab>(defaultTab);
   const { mode, isNarrow, override, setOverride } = useViewMode();
   const mobile = mode === "mobile";
+
+  // Restore the last-viewed tab after mount (kept out of the initial state to
+  // avoid an SSR/client hydration mismatch).
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(TAB_STORAGE_KEY) as AppTab | null;
+      if (stored && VALID_TABS.includes(stored)) setActiveTab(stored);
+    } catch { /* localStorage unavailable */ }
+  }, []);
+
+  function selectTab(tab: AppTab) {
+    setActiveTab(tab);
+    try { localStorage.setItem(TAB_STORAGE_KEY, tab); } catch { /* noop */ }
+  }
 
   // Viewers only see roadmap initiatives (and their links from the strategy chart)
   // once an editor has published the roadmap. Editors always see them.
@@ -64,7 +83,7 @@ export default function AppShell({
               role="tab"
               aria-selected={activeTab === tab.id}
               className={`app-tab ${activeTab === tab.id ? "active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
             >
               <span className="app-tab-full">{tab.label}</span>
               <span className="app-tab-short">{tab.shortLabel}</span>
@@ -76,7 +95,7 @@ export default function AppShell({
         <select
           className="app-tabs-select"
           value={activeTab}
-          onChange={(e) => setActiveTab(e.target.value as AppTab)}
+          onChange={(e) => selectTab(e.target.value as AppTab)}
           aria-label="Select view"
         >
           {TABS.map((tab) => (
@@ -86,6 +105,7 @@ export default function AppShell({
 
         <div className="app-tabs-right">
           {readOnly && <span className="readonly-badge">View only</span>}
+          <UserMenu canManageEditors={canManageEditors} />
         </div>
       </nav>
 

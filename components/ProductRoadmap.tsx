@@ -685,7 +685,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                   { start: initiative.startUnit!, end: initiative.endUnit! },
                   "__main__",
                   initiative.mainBarLabel || "",
-                  { description: initiative.description, northStarMetric: initiative.northStarMetric, successMetrics: initiative.successMetrics },
+                  { description: initiative.mainBarDescription, northStarMetric: initiative.mainBarNorthStarMetric, successMetrics: initiative.mainBarSuccessMetrics },
                   async () => {
                     const lbl = initiative.mainBarLabel || initiative.name;
                     if (!confirm(`Delete workstream "${lbl}"?`)) return;
@@ -702,9 +702,9 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                       const eq = Math.floor((promote.endUnit! - 1) / UNITS_PER_QUARTER);
                       await patchInitiative({
                         mainBarLabel: promote.label || "",
-                        description: promote.description || "",
-                        northStarMetric: promote.northStarMetric || "",
-                        successMetrics: promote.successMetrics || "",
+                        mainBarDescription: promote.description || "",
+                        mainBarNorthStarMetric: promote.northStarMetric || "",
+                        mainBarSuccessMetrics: promote.successMetrics || "",
                         startUnit: promote.startUnit,
                         endUnit: promote.endUnit,
                         quarter: QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, sq))],
@@ -713,6 +713,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                       });
                     } else {
                       await patchInitiative({
+                        mainBarLabel: "", mainBarDescription: "", mainBarNorthStarMetric: "", mainBarSuccessMetrics: "",
                         startUnit: null, endUnit: null, quarter: "", endQuarter: "",
                       });
                     }
@@ -834,13 +835,14 @@ function WorkstreamModal({
   async function save() {
     setBusy(true); setError(null);
     try {
-      // The initiative's own bar saves into the initiative's fields; sub-bars into subBars.
+      // The initiative's own bar saves into its dedicated main-bar fields (kept
+      // independent of the initiative-level description/metrics); sub-bars into subBars.
       const payload: Partial<RoadmapInitiative> = isMain
         ? {
             mainBarLabel: form.label.trim(),
-            description: form.description || "",
-            northStarMetric: form.northStarMetric || "",
-            successMetrics: form.successMetrics || "",
+            mainBarDescription: form.description || "",
+            mainBarNorthStarMetric: form.northStarMetric || "",
+            mainBarSuccessMetrics: form.successMetrics || "",
           }
         : {
             subBars: (initiative.subBars || []).map((sb) =>
@@ -1276,7 +1278,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
   const [isPublished, setIsPublished] = useState(published);
   const [publishing, setPublishing] = useState(false);
-  const [view, setView] = useState<ViewId>("6M");
+  const [view, setView] = useState<ViewId>("3M");
   const [snapMenuOpen, setSnapMenuOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const snapshotRef = useRef<HTMLDivElement | null>(null);
@@ -1897,7 +1899,8 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const newInitiative: RoadmapInitiative = {
     id: "__new__", summary: "", name: "", strategyGoal: "", status: "Planned",
     description: "", owner: "", team: "", quarter: "", endQuarter: "", startUnit: null, endUnit: null,
-    mainBarLabel: "", subBars: [], northStarMetric: "", successMetrics: "",
+    mainBarLabel: "", mainBarDescription: "", mainBarNorthStarMetric: "", mainBarSuccessMetrics: "",
+    subBars: [], northStarMetric: "", successMetrics: "",
     notes: "", comments: [], order: 999,
   };
   const modalInitiative = modal === "new" ? newInitiative : modal;
@@ -2257,9 +2260,9 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
               label: ws.mainBarLabel || ws.name,
               startUnit: ws.startUnit,
               endUnit: ws.endUnit,
-              description: ws.description,
-              northStarMetric: ws.northStarMetric,
-              successMetrics: ws.successMetrics,
+              description: ws.mainBarDescription,
+              northStarMetric: ws.mainBarNorthStarMetric,
+              successMetrics: ws.mainBarSuccessMetrics,
             }
           : ws.subBars?.find((s) => s.id === workstreamModal.subBarId);
         if (!sb) return null;
