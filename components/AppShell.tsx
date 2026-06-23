@@ -34,6 +34,11 @@ export default function AppShell({
 }: Props) {
   const [activeTab, setActiveTab] = useState<AppTab>(defaultTab);
 
+  // Viewers only see roadmap initiatives (and their links from the strategy chart)
+  // once an editor has published the roadmap. Editors always see them.
+  const hideRoadmapFromViewer = readOnly && !roadmapPublished;
+  const strategyRoadmapInitiatives = hideRoadmapFromViewer ? [] : roadmapInitiatives;
+
   return (
     <div className="app-shell">
       {/* ── Tab bar ──────────────────────────────────────── */}
@@ -97,7 +102,7 @@ export default function AppShell({
 
       <div style={activeTab !== "strategy" ? { display: "none" } : {}}>
         <StasherStrategy
-          roadmapInitiatives={roadmapInitiatives}
+          roadmapInitiatives={strategyRoadmapInitiatives}
           onNavigateToRoadmap={() => setActiveTab("roadmap")}
         />
       </div>
