@@ -534,7 +534,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
             </span>
           )}
           {initiative.team && (
-            <span className="meta-badge rmi-team-badge">{initiative.team}</span>
+            <span className={`meta-badge rmi-team-badge team-${initiative.team.toLowerCase()}`}>{initiative.team}</span>
           )}
           {initiative.owner && (
             <span className="meta-badge area">{initiative.owner}</span>
@@ -1164,7 +1164,7 @@ function GanttRow({
         <span className="gantt-row-name" onClick={(e) => { e.stopPropagation(); onOpen(null); }} role="button" title="View details">
           {initiative.name}
         </span>
-        {initiative.team && <span className="gantt-team-chip">{initiative.team}</span>}
+        {initiative.team && <span className={`gantt-team-chip team-${initiative.team.toLowerCase()}`}>{initiative.team}</span>}
         {initiative.owner && <span className="gantt-owner-chip">{initiative.owner}</span>}
       </div>
 
