@@ -3402,6 +3402,167 @@ a.link:hover { text-decoration: underline; }
   letter-spacing: 0.07em;
 }
 
+/* ── Team chip on Gantt row label ── */
+.gantt-team-chip {
+  display: none; /* show on wider screens only */
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #6d28d9;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+@media (min-width: 700px) { .gantt-team-chip { display: inline; } }
+
+/* ── Now / Next / Later horizon labels inside month header cells ── */
+.gantt-header-cell { flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.gantt-active-q-col { background: #fafafa; }
+.gantt-horizon-label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #a78bfa;
+  line-height: 1;
+}
+
+/* ── Sub-bar rows — taller to fit two stacked bars ── */
+.gantt-row-has-subbars { height: auto; min-height: 52px; }
+.gantt-sub-bar { cursor: pointer; }
+.gantt-sub-bar-label { font-size: 10.5px; }
+
+/* ── Draw gesture ── */
+.gantt-track-drawable { cursor: crosshair; }
+.gantt-draw-ghost {
+  background: #a78bfa44;
+  border: 2px dashed #7c3aed;
+  border-radius: 5px;
+  z-index: 3;
+}
+
+/* ── Bar move handle — sits in the centre of the bar, between resize handles ── */
+.gantt-bar-move-handle {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  bottom: 0;
+  cursor: grab;
+  z-index: 2;
+}
+.gantt-bar-move-handle:active { cursor: grabbing; }
+
+/* ── Sub-bar naming modal ── */
+.subbar-name-modal { max-width: 380px; }
+
+/* ── Workstreams list in view modal ── */
+.rmi-workstreams-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rmi-workstream-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.rmi-workstream-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rmi-workstream-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  flex: 1;
+}
+.rmi-workstream-label-btn {
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rmi-workstream-label-btn:not(:disabled):hover { background: #eef2ff; }
+.rmi-workstream-label-btn:disabled { cursor: default; }
+.rmi-workstream-rename-input {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+}
+.rmi-workstream-range {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.rmi-workstream-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.rmi-workstream-delete:hover { color: #ef4444; background: #fef2f2; }
+
+/* ── Sub-bar editor rows in the modal ── */
+.rmi-subbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rmi-subbar-label-input { flex: 1; }
+.rmi-subbar-remove { padding: 4px 10px; font-size: 13px; }
+
+/* ── Sub-bar chips in view mode ── */
+.rmi-subbar-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rmi-subbar-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 7px;
+  border: 1.5px solid;
+  background: transparent;
+}
+
+/* ── North star metric display ── */
+.rmi-north-star-metric {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 8px 12px;
+  background: #fafafa;
+  border-left: 3px solid #a78bfa;
+  border-radius: 0 6px 6px 0;
+  line-height: 1.4;
+}
+
+/* ── Team badge in view modal ── */
+.rmi-team-badge { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
+
 /* Mobile: narrower label column (column width is driven by the zoom switcher). */
 @media (max-width: 600px) {
   .gantt-label-cell { width: 140px; min-width: 140px; padding: 0 8px; }

@@ -1,3 +1,26 @@
+// ── Airtable "Product Roadmap" table — required fields ────────────────────────
+// Add these fields to the table if they don't already exist:
+//
+//  Name            (Single line text)   — initiative name
+//  Summary         (Single line text)   — group / swimlane header
+//  Status          (Single select)      — Planned | In Progress | Done | On Hold
+//  Strategy Goal   (Single select)      — 1.1 … 3.3
+//  Owner           (Single line text)
+//  Team            (Single select)      — Hosts | Customers
+//  Quarter         (Single select)      — Q3 2026 … Q4 2027
+//  End Quarter     (Single select)      — Q3 2026 … Q4 2027
+//  Start Unit      (Number)             — fine-grained half-month offset
+//  End Unit        (Number)             — fine-grained half-month offset (exclusive)
+//  Main Bar Label  (Single line text)   — primary bar / workstream label (blank = use Name)
+//  Sub Bars        (Long text)          — JSON array of RoadmapSubBar
+//  North Star Metric (Single line text) — headline metric this initiative moves
+//  Success Metrics (Long text)          — how success will be tracked
+//  Description     (Long text)
+//  Notes           (Long text)
+//  Comments        (Long text)          — JSON array of RoadmapComment
+//  Order           (Number)             — sort order within swimlane
+// ─────────────────────────────────────────────────────────────────────────────
+
 const API_BASE = "https://api.airtable.com/v0";
 
 export type RoadmapStatus = "Planned" | "In Progress" | "Done" | "On Hold";
@@ -31,11 +54,22 @@ export const ROADMAP_STATUS_OPTIONS: RoadmapStatus[] = [
   "On Hold",
 ];
 
+export const ROADMAP_TEAM_OPTIONS = ["Hosts", "Customers"] as const;
+export type RoadmapTeam = typeof ROADMAP_TEAM_OPTIONS[number];
+
 export interface RoadmapComment {
   id: string;
   author: string;
   text: string;
   createdAt: string; // ISO string
+}
+
+// A secondary bar overlaid on the same Gantt row (e.g. "Web", "V2").
+export interface RoadmapSubBar {
+  id: string;
+  label: string;
+  startUnit: number | null;
+  endUnit: number | null;
 }
 
 export interface RoadmapInitiative {
@@ -46,6 +80,7 @@ export interface RoadmapInitiative {
   status: RoadmapStatus;
   description: string;
   owner: string;
+  team: RoadmapTeam | "";
   quarter: string;        // start quarter, e.g. "Q3 2026"
   endQuarter: string;     // end quarter (inclusive); empty = same as quarter
   // Fine-grained timeline position in half-months from the timeline anchor
@@ -53,6 +88,12 @@ export interface RoadmapInitiative {
   // startUnit inclusive, endUnit exclusive. null = derive from quarter/endQuarter.
   startUnit: number | null;
   endUnit: number | null;
+  // Label for the primary bar / workstream. Empty = fall back to `name`.
+  mainBarLabel: string;
+  // Additional bars on the same row (e.g. separate App / Web timelines or V2, V3).
+  subBars: RoadmapSubBar[];
+  northStarMetric: string;   // single headline metric this initiative moves
+  successMetrics: string;    // how we'll track success (comma-separated or prose)
   notes: string;
   comments: RoadmapComment[];
   order: number;
@@ -89,6 +130,14 @@ function toRoadmapInitiative(rec: any): RoadmapInitiative {
     endQuarter: f["End Quarter"] || "",
     startUnit: typeof f["Start Unit"] === "number" ? f["Start Unit"] : null,
     endUnit: typeof f["End Unit"] === "number" ? f["End Unit"] : null,
+    team: (f["Team"] as RoadmapTeam) || "",
+    mainBarLabel: f["Main Bar Label"] || "",
+    subBars: (() => {
+      try { return f["Sub Bars"] ? JSON.parse(f["Sub Bars"]) : []; }
+      catch { return []; }
+    })(),
+    northStarMetric: f["North Star Metric"] || "",
+    successMetrics: f["Success Metrics"] || "",
     notes: f["Notes"] || "",
     comments: (() => {
       try { return f["Comments"] ? JSON.parse(f["Comments"]) : []; }
@@ -106,10 +155,15 @@ function toFields(input: Partial<RoadmapInitiative>): Record<string, any> {
   if (input.status !== undefined) f["Status"] = input.status;
   if (input.description !== undefined) f["Description"] = input.description;
   if (input.owner !== undefined) f["Owner"] = input.owner;
+  if (input.team !== undefined) f["Team"] = input.team || null;
   if (input.quarter !== undefined) f["Quarter"] = input.quarter;
   if (input.endQuarter !== undefined) f["End Quarter"] = input.endQuarter || null;
   if (input.startUnit !== undefined) f["Start Unit"] = input.startUnit;
   if (input.endUnit !== undefined) f["End Unit"] = input.endUnit;
+  if (input.mainBarLabel !== undefined) f["Main Bar Label"] = input.mainBarLabel;
+  if (input.subBars !== undefined) f["Sub Bars"] = JSON.stringify(input.subBars);
+  if (input.northStarMetric !== undefined) f["North Star Metric"] = input.northStarMetric;
+  if (input.successMetrics !== undefined) f["Success Metrics"] = input.successMetrics;
   if (input.notes !== undefined) f["Notes"] = input.notes;
   if (input.comments !== undefined) f["Comments"] = JSON.stringify(input.comments);
   if (input.order !== undefined) f["Order"] = input.order;

@@ -12,8 +12,11 @@ import {
   RoadmapInitiative,
   RoadmapComment,
   RoadmapStatus,
+  RoadmapTeam,
+  RoadmapSubBar,
   StrategyGoal,
   ROADMAP_STATUS_OPTIONS,
+  ROADMAP_TEAM_OPTIONS,
   STRATEGY_GOAL_LABELS,
 } from "@/lib/roadmap-initiatives";
 
@@ -35,6 +38,9 @@ const QUARTER_MONTHS: Record<string, number[]> = {
 };
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// Within the active quarter the 3 months map to Now / Next / Later.
+const QUARTER_MONTH_HORIZON = ["Now", "Next", "Later"] as const;
+
 // ── Timeline units ─────────────────────────────────────────────────────────
 // The timeline is measured in "half-month units" anchored at QUARTERS[0] month 0.
 // 1 month = 2 units; 1 quarter = 6 units. Resizing snaps to whole units (half-months).
@@ -43,6 +49,28 @@ const UNITS_PER_QUARTER = UNITS_PER_MONTH * 3; // 6
 
 function quarterToStartUnit(qIdx: number): number {
   return qIdx * UNITS_PER_QUARTER;
+}
+
+// Convert a timeline unit (half-month, anchored at QUARTERS[0] month 0) into a
+// readable label like "Early Jul 2026" or "Mid Aug 2026".
+function unitToDateLabel(unit: number): string {
+  const monthsFromAnchor = Math.floor(unit / UNITS_PER_MONTH);
+  const isSecondHalf = unit % UNITS_PER_MONTH === 1;
+  const qi = Math.floor(monthsFromAnchor / 3);
+  const monthInQuarter = monthsFromAnchor % 3;
+  const quarter = QUARTERS[Math.min(QUARTERS.length - 1, Math.max(0, qi))];
+  const qNum = quarter.slice(0, 2);
+  const year = parseInt(quarter.slice(3));
+  const calMonth = QUARTER_MONTHS[qNum][monthInQuarter];
+  return `${isSecondHalf ? "Mid" : "Early"} ${MONTH_ABBR[calMonth]} ${year}`;
+}
+
+// A readable span label for a [start, end) unit range, e.g.
+// "Early Jul 2026 → Mid Aug 2026". end is exclusive, so we render end-1's month.
+function unitRangeLabel(start: number, end: number): string {
+  const startLabel = unitToDateLabel(start);
+  const endLabel = unitToDateLabel(Math.max(start, end - 1));
+  return startLabel === endLabel ? startLabel : `${startLabel} → ${endLabel}`;
 }
 
 // Resolve an initiative's [startUnit, endUnit) span, falling back to quarter fields
@@ -187,6 +215,9 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
   const [commentText, setCommentText] = useState("");
   const [commentAuthor, setCommentAuthor] = useState("");
   const [addingComment, setAddingComment] = useState(false);
+  // Inline rename of a workstream from view mode. "__main__" = the primary bar.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   const statusStyle = STATUS_STYLES[form.status] ?? STATUS_STYLES["Planned"];
   const gn = goalNum(form.strategyGoal);
@@ -194,6 +225,40 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
 
   function set(key: keyof RoadmapInitiative, value: unknown) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Persist a partial update from view mode (used for inline workstream renames).
+  async function patchInitiative(patch: Partial<RoadmapInitiative>) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/roadmap-initiatives/${initiative.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Failed");
+      onSaved(data.initiative);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function commitRename() {
+    const id = renamingId;
+    const label = renameDraft.trim();
+    setRenamingId(null);
+    if (!id) return;
+    if (id === "__main__") {
+      if (label !== (initiative.mainBarLabel || "")) patchInitiative({ mainBarLabel: label });
+    } else {
+      const next = (initiative.subBars || []).map((x) =>
+        x.id === id ? { ...x, label: label || "Unlabelled" } : x
+      );
+      patchInitiative({ subBars: next });
+    }
   }
 
   async function handleSave() {
@@ -358,11 +423,40 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                   </select>
                 </div>
                 <div className="field">
+                  <label className="field-label">Team</label>
+                  <select className="select" value={form.team || ""}
+                    onChange={(e) => set("team", e.target.value as RoadmapTeam | "")}>
+                    <option value="">— None —</option>
+                    {ROADMAP_TEAM_OPTIONS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="rmi-grid-2" style={{ marginTop: 12 }}>
+                <div className="field">
                   <label className="field-label">Owner</label>
                   <input className="input" value={form.owner || ""}
                     onChange={(e) => set("owner", e.target.value)}
                     placeholder="Team or person" />
                 </div>
+              </div>
+            </div>
+
+            {/* Section: Success & metrics */}
+            <div className="rmi-section">
+              <div className="rmi-section-title">Success &amp; metrics</div>
+              <div className="field">
+                <label className="field-label">North star metric</label>
+                <input className="input" value={form.northStarMetric || ""}
+                  onChange={(e) => set("northStarMetric", e.target.value)}
+                  placeholder="e.g. First-booking CVR from Tier 1 city pages" />
+              </div>
+              <div className="field" style={{ marginTop: 10 }}>
+                <label className="field-label">How we'll track success</label>
+                <textarea className="textarea" rows={2} value={form.successMetrics || ""}
+                  onChange={(e) => set("successMetrics", e.target.value)}
+                  placeholder="Key metrics and signals we'll use to measure this initiative…" />
               </div>
             </div>
 
@@ -437,6 +531,9 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
               {initiative.quarter}{initiative.endQuarter && initiative.endQuarter !== initiative.quarter ? ` → ${initiative.endQuarter}` : ""}
             </span>
           )}
+          {initiative.team && (
+            <span className="meta-badge rmi-team-badge">{initiative.team}</span>
+          )}
           {initiative.owner && (
             <span className="meta-badge area">{initiative.owner}</span>
           )}
@@ -458,6 +555,105 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
             <p className="modal-desc">{initiative.description}</p>
           </div>
         )}
+
+        {/* North star metric */}
+        {initiative.northStarMetric && (
+          <div className="modal-section">
+            <p className="rmi-section-label">North star metric</p>
+            <div className="rmi-north-star-metric">{initiative.northStarMetric}</div>
+          </div>
+        )}
+
+        {/* Success metrics */}
+        {initiative.successMetrics && (
+          <div className="modal-section">
+            <p className="rmi-section-label">How we&apos;ll track success</p>
+            <div className="modal-notes">{initiative.successMetrics}</div>
+          </div>
+        )}
+
+        {/* Workstreams — the primary bar plus any sub-bars. Shown when there's a
+            placed primary bar or at least one sub-bar. */}
+        {(() => {
+          const gc2 = goalColor(initiative);
+          const hasPrimary = initiative.startUnit != null && initiative.endUnit != null;
+          const subs = initiative.subBars || [];
+          if (!hasPrimary && subs.length === 0) return null;
+
+          const rowFor = (
+            key: string,
+            currentLabel: string,
+            span: { start: number; end: number } | null,
+            renameKey: string | null, // null = not renamable
+            renameSeed: string,
+            onDelete?: () => void,
+          ) => (
+            <div key={key} className="rmi-workstream-row">
+              <span className="rmi-workstream-dot" style={{ background: gc2 }} />
+              {renameKey && renamingId === renameKey ? (
+                <input
+                  className="input rmi-workstream-rename-input"
+                  autoFocus
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitRename();
+                    if (e.key === "Escape") setRenamingId(null);
+                  }}
+                />
+              ) : (
+                <button
+                  className="rmi-workstream-label rmi-workstream-label-btn"
+                  disabled={readOnly || !renameKey}
+                  title={readOnly || !renameKey ? undefined : "Click to rename"}
+                  onClick={() => {
+                    if (readOnly || !renameKey) return;
+                    setRenameDraft(renameSeed);
+                    setRenamingId(renameKey);
+                  }}
+                >
+                  {currentLabel}
+                </button>
+              )}
+              {span && (
+                <span className="rmi-workstream-range">{unitRangeLabel(span.start, span.end)}</span>
+              )}
+              {!readOnly && onDelete && (
+                <button className="rmi-workstream-delete" title="Delete this workstream" onClick={onDelete}>✕</button>
+              )}
+            </div>
+          );
+
+          return (
+            <div className="modal-section">
+              <p className="rmi-section-label">Workstreams</p>
+              <div className="rmi-workstreams-list">
+                {hasPrimary && rowFor(
+                  "__main__",
+                  initiative.mainBarLabel || initiative.name,
+                  { start: initiative.startUnit!, end: initiative.endUnit! },
+                  "__main__",
+                  initiative.mainBarLabel || "",
+                )}
+                {subs.map((sb) =>
+                  rowFor(
+                    sb.id,
+                    sb.label || "Unlabelled",
+                    sb.startUnit != null && sb.endUnit != null ? { start: sb.startUnit, end: sb.endUnit } : null,
+                    sb.id,
+                    sb.label || "",
+                    async () => {
+                      if (!confirm(`Delete workstream "${sb.label || "Unlabelled"}"?`)) return;
+                      const next = subs.filter((x) => x.id !== sb.id);
+                      await patchInitiative({ subBars: next });
+                    },
+                  )
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Notes */}
         {initiative.notes && (
@@ -518,7 +714,61 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
   );
 }
 
+// ── Sub-bar naming modal ──────────────────────────────────────────────────────
+// Shown after a draw gesture creates a new sub-bar. The user names it then confirms.
+
+function SubBarNameModal({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: (label: string) => void;
+  onCancel: () => void;
+}) {
+  const [label, setLabel] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  function submit() {
+    onConfirm(label.trim() || "New bar");
+  }
+
+  return (
+    <div className="overlay" onClick={onCancel}>
+      <div className="modal subbar-name-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-header-left">
+            <h2>Name this workstream</h2>
+            <p className="modal-subtitle">e.g. App, Web, MVP, V2…</p>
+          </div>
+          <button className="modal-close-x" onClick={onCancel} aria-label="Close">✕</button>
+        </div>
+        <div style={{ padding: "16px 24px 20px" }}>
+          <input
+            ref={inputRef}
+            className="input"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") onCancel(); }}
+            placeholder="Workstream name"
+            style={{ fontSize: 15 }}
+          />
+        </div>
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn btn-soft" onClick={onCancel}>Cancel</button>
+          <button className="btn primary" onClick={submit}>Add workstream</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Gantt row ─────────────────────────────────────────────────────────────────
+
+// Returns true if two [start,end) spans overlap.
+function spansOverlap(a: { start: number; end: number }, b: { start: number; end: number }) {
+  return a.start < b.end && b.start < a.end;
+}
 
 function GanttRow({
   initiative,
@@ -527,10 +777,16 @@ function GanttRow({
   windowEndUnit,
   onOpen,
   onSpanChange,
+  onSubBarSpanChange,
+  onTrackPointerDown,
+  onBarMoveStart,
   readOnly,
   resizePreview,
-  wasResizing,
+  resizingSubBarId,
+  movePreview,
+  movingSubBarId,
   onResizeStart,
+  drawGhost,
   dragHandleProps,
 }: {
   initiative: RoadmapInitiative;
@@ -538,121 +794,216 @@ function GanttRow({
   windowStartUnit: number;
   windowEndUnit: number;
   onOpen: () => void;
-  // Persist a fine-grained [startUnit, endUnit) span.
   onSpanChange: (id: string, startUnit: number, endUnit: number) => void;
+  onSubBarSpanChange: (id: string, subBarId: string, startUnit: number, endUnit: number) => void;
+  onTrackPointerDown: (e: React.PointerEvent, id: string) => void;
+  onBarMoveStart: (e: React.PointerEvent, id: string, subBarId: string | null) => void;
   readOnly: boolean;
-  // Live resize preview, expressed in units.
   resizePreview?: { start: number; end: number } | null;
-  wasResizing: () => boolean;
-  onResizeStart: (e: React.PointerEvent, id: string, side: "left" | "right") => void;
+  resizingSubBarId?: string | null;
+  movePreview?: { start: number; end: number } | null;
+  movingSubBarId?: string | null;
+  onResizeStart: (e: React.PointerEvent, id: string, side: "left" | "right", subBarId?: string) => void;
+  drawGhost?: { start: number; end: number } | null;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }) {
   const ss = STATUS_STYLES[initiative.status] ?? STATUS_STYLES["Planned"];
   const gc = goalColor(initiative);
-
-  // Resolve the bar's unit span (preview during drag, else stored).
-  const stored = spanUnitsOf(initiative);
-  const span = resizePreview ?? stored;
   const windowUnits = windowEndUnit - windowStartUnit;
+  const subBars = initiative.subBars || [];
 
-  // Clip the span to the visible window and convert to % offsets.
-  let bar: { leftPct: number; widthPct: number; clipLeft: boolean; clipRight: boolean } | null = null;
-  if (span && span.end > windowStartUnit && span.start < windowEndUnit) {
-    const visStart = Math.max(span.start, windowStartUnit);
-    const visEnd   = Math.min(span.end, windowEndUnit);
-    bar = {
-      leftPct: ((visStart - windowStartUnit) / windowUnits) * 100,
-      widthPct: ((visEnd - visStart) / windowUnits) * 100,
-      clipLeft: span.start < windowStartUnit,
-      clipRight: span.end > windowEndUnit,
+  function clipSpan(s: { start: number; end: number }) {
+    if (s.end <= windowStartUnit || s.start >= windowEndUnit) return null;
+    const visStart = Math.max(s.start, windowStartUnit);
+    const visEnd   = Math.min(s.end,   windowEndUnit);
+    return {
+      leftPct:  ((visStart - windowStartUnit) / windowUnits) * 100,
+      widthPct: ((visEnd   - visStart)        / windowUnits) * 100,
+      clipLeft:  s.start < windowStartUnit,
+      clipRight: s.end   > windowEndUnit,
     };
   }
 
-  function handleTrackClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (wasResizing()) return; // ignore the click that trails a resize drag
-    // Clicking an existing bar opens detail; in read-only that's the only action.
-    if (span) { onOpen(); return; }
-    if (readOnly) return;
-    // No bar yet — place a 1-month bar snapped to the clicked half-month.
-    const rect = e.currentTarget.getBoundingClientRect();
-    const frac = (e.clientX - rect.left) / rect.width;
-    const rawUnit = windowStartUnit + frac * windowUnits;
-    const startU = Math.round(rawUnit); // snap to half-month
-    onSpanChange(initiative.id, startU, startU + UNITS_PER_MONTH);
+  // Resolve live spans (resize/move previews override stored values).
+  const storedPrimary = spanUnitsOf(initiative);
+  const primarySpan: { start: number; end: number } | null =
+    resizePreview && !resizingSubBarId ? resizePreview
+    : movePreview && !movingSubBarId   ? movePreview
+    : storedPrimary;
+
+  // Resolve each sub-bar's live span.
+  const resolvedSubBars = subBars.map((sb) => {
+    if (resizingSubBarId === sb.id && resizePreview) return { ...sb, startUnit: resizePreview.start, endUnit: resizePreview.end };
+    if (movingSubBarId   === sb.id && movePreview)   return { ...sb, startUnit: movePreview.start,   endUnit: movePreview.end };
+    return sb;
+  });
+
+  // Detect overlaps among all placed bars to decide layout.
+  // Build list of all placed spans (primary + subbars with positions).
+  const allSpans: { start: number; end: number }[] = [];
+  if (primarySpan) allSpans.push(primarySpan);
+  for (const sb of resolvedSubBars) {
+    if (sb.startUnit != null && sb.endUnit != null) allSpans.push({ start: sb.startUnit, end: sb.endUnit });
+  }
+  // Any two bars overlap → use stacked layout for the whole row.
+  let hasOverlap = false;
+  for (let i = 0; i < allSpans.length && !hasOverlap; i++) {
+    for (let j = i + 1; j < allSpans.length && !hasOverlap; j++) {
+      if (spansOverlap(allSpans[i], allSpans[j])) hasOverlap = true;
+    }
+  }
+
+  // Stacked layout (and the taller row) is used ONLY when bars actually overlap,
+  // or while drawing a ghost over an existing bar. Non-overlapping sub-bars share
+  // the same full-height track as the primary bar, keeping the original bar height.
+  const showTall = hasOverlap || (!!drawGhost && !!primarySpan && (() => {
+    const g = drawGhost!;
+    return allSpans.some((s) => spansOverlap(s, g));
+  })());
+
+  const bar   = primarySpan ? clipSpan(primarySpan) : null;
+  const ghost = drawGhost   ? clipSpan(drawGhost)   : null;
+
+  // Bar height / vertical position helpers.
+  // Full-height (no overlap): use CSS defaults (top:7px bottom:7px via .gantt-bar).
+  // Stacked (overlap): lanes ordered by start date — earliest-starting on top.
+  const STACK_H = 16;
+  const STACK_GAP = 4;
+  const STACK_TOP = 5;
+  const stackTopForIdx = (idx: number) => STACK_TOP + idx * (STACK_H + STACK_GAP);
+
+  // When overlapping, order every placed lane (primary + sub-bars) by start unit
+  // (then end unit) so the workstream that starts first sits at the top. The key
+  // "__primary__" identifies the initiative's own bar.
+  const PRIMARY_KEY = "__primary__";
+  const placedLanes: { key: string; start: number; end: number }[] = [];
+  if (primarySpan) placedLanes.push({ key: PRIMARY_KEY, start: primarySpan.start, end: primarySpan.end });
+  for (const sb of resolvedSubBars) {
+    if (sb.startUnit != null && sb.endUnit != null) placedLanes.push({ key: sb.id, start: sb.startUnit, end: sb.endUnit });
+  }
+  placedLanes.sort((a, b) => a.start - b.start || a.end - b.end);
+  const laneIdxByKey = new Map<string, number>();
+  placedLanes.forEach((lane, idx) => laneIdxByKey.set(lane.key, idx));
+
+  // When stacked, the row must be tall enough for every lane (+ a draw ghost lane).
+  const stackedLaneCount = placedLanes.length + (showTall && ghost ? 1 : 0);
+  const stackedRowHeight = STACK_TOP * 2 + stackedLaneCount * STACK_H + Math.max(0, stackedLaneCount - 1) * STACK_GAP;
+
+  function barStyle(isStacked: boolean, stackIdx: number, clipped: { clipLeft: boolean; clipRight: boolean }) {
+    const base = {
+      background: gc + "22",
+      borderTop:    `2px solid ${gc}66`,
+      borderBottom: `2px solid ${gc}66`,
+      borderLeft:   clipped.clipLeft  ? "none" : `3px solid ${gc}`,
+      borderRight:  clipped.clipRight ? "none" : `3px solid ${gc}`,
+      borderTopLeftRadius:     clipped.clipLeft  ? 0 : 6,
+      borderBottomLeftRadius:  clipped.clipLeft  ? 0 : 6,
+      borderTopRightRadius:    clipped.clipRight ? 0 : 6,
+      borderBottomRightRadius: clipped.clipRight ? 0 : 6,
+    };
+    if (!isStacked) return base; // CSS handles top/bottom
+    return {
+      ...base,
+      top: stackTopForIdx(stackIdx),
+      bottom: "auto" as const,
+      height: STACK_H,
+    };
   }
 
   return (
-    <div className="gantt-row">
-      {/* Label cell — the whole cell is the drag handle (reorder) */}
+    <div
+      className={`gantt-row${showTall ? " gantt-row-has-subbars" : ""}`}
+      style={showTall ? { height: stackedRowHeight } : undefined}
+    >
+      {/* Label cell */}
       <div
         className={`gantt-label-cell${!readOnly ? " gantt-label-draggable" : ""}`}
         {...(!readOnly ? dragHandleProps : {})}
       >
-        {!readOnly && (
-          <span className="gantt-drag-grip" title="Drag to reorder" aria-hidden>⠿</span>
-        )}
+        {!readOnly && <span className="gantt-drag-grip" title="Drag to reorder" aria-hidden>⠿</span>}
         <span className="gantt-dot" style={{ background: ss.dot }} title={initiative.status} />
-        <span
-          className="gantt-row-name"
-          onClick={(e) => { e.stopPropagation(); onOpen(); }}
-          role="button"
-          title="View details"
-        >
+        <span className="gantt-row-name" onClick={(e) => { e.stopPropagation(); onOpen(); }} role="button" title="View details">
           {initiative.name}
         </span>
+        {initiative.team && <span className="gantt-team-chip">{initiative.team}</span>}
         {initiative.owner && <span className="gantt-owner-chip">{initiative.owner}</span>}
       </div>
 
-      {/* Month track — grid for dividers, with an absolutely-positioned bar overlay */}
+      {/* Month track */}
       <div
-        className="gantt-track-grid gantt-track-overlay"
+        className={`gantt-track-grid gantt-track-overlay${!readOnly ? " gantt-track-drawable" : ""}`}
         style={{ gridTemplateColumns: `repeat(${months.length}, var(--gantt-col-w))` }}
-        onClick={handleTrackClick}
+        onPointerDown={readOnly ? undefined : (e) => onTrackPointerDown(e, initiative.id)}
       >
         {months.map((col) => (
-          <div
-            key={`${col.year}-${col.monthIdx}`}
-            className={`gantt-cell${col.isQuarterStart ? " gantt-quarter-start" : ""}`}
-          />
+          <div key={`${col.year}-${col.monthIdx}`}
+            className={`gantt-cell${col.isQuarterStart ? " gantt-quarter-start" : ""}`} />
         ))}
 
-        {bar && (
-          <div
-            className="gantt-bar gantt-bar-abs"
-            style={{
-              left: `${bar.leftPct}%`,
-              width: `${bar.widthPct}%`,
-              background: gc + "22",
-              borderTop: `2px solid ${gc}66`,
-              borderBottom: `2px solid ${gc}66`,
-              borderLeft: bar.clipLeft ? "none" : `3px solid ${gc}`,
-              borderRight: bar.clipRight ? "none" : `3px solid ${gc}`,
-              borderTopLeftRadius: bar.clipLeft ? 0 : 6,
-              borderBottomLeftRadius: bar.clipLeft ? 0 : 6,
-              borderTopRightRadius: bar.clipRight ? 0 : 6,
-              borderBottomRightRadius: bar.clipRight ? 0 : 6,
-            }}
-          >
-            {!readOnly && !bar.clipLeft && (
-              <div
-                className="gantt-resize-handle gantt-resize-left"
-                onPointerDown={(e) => onResizeStart(e, initiative.id, "left")}
-                title="Drag to change start"
-                aria-label="Resize start"
-              />
-            )}
-            <span className="gantt-bar-label" style={{ color: gc }}>
-              {initiative.name}
-            </span>
-            {!readOnly && !bar.clipRight && (
-              <div
-                className="gantt-resize-handle gantt-resize-right"
-                onPointerDown={(e) => onResizeStart(e, initiative.id, "right")}
-                title="Drag to resize"
-                aria-label="Resize end"
-              />
-            )}
-          </div>
+        {/* Primary bar */}
+        {bar && (() => {
+          const stackIdx = laneIdxByKey.get(PRIMARY_KEY) ?? 0;
+          const style = { left: `${bar.leftPct}%`, width: `${bar.widthPct}%`, ...barStyle(showTall, stackIdx, bar) };
+          return (
+            <div className="gantt-bar" style={style} onClick={(e) => { e.stopPropagation(); onOpen(); }}>
+              {!readOnly && !bar.clipLeft && (
+                <div className="gantt-resize-handle gantt-resize-left"
+                  onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "left"); }} />
+              )}
+              {!readOnly && (
+                <div className="gantt-bar-move-handle"
+                  onPointerDown={(e) => { e.stopPropagation(); onBarMoveStart(e, initiative.id, null); }}
+                  title="Drag to move" />
+              )}
+              <span className="gantt-bar-label" style={{ color: gc }}>{initiative.mainBarLabel || initiative.name}</span>
+              {!readOnly && !bar.clipRight && (
+                <div className="gantt-resize-handle gantt-resize-right"
+                  onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "right"); }} />
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Sub-bars — all use the same goal colour as the primary bar */}
+        {resolvedSubBars.map((sb) => {
+          if (sb.startUnit == null || sb.endUnit == null) return null;
+          const sbBar = clipSpan({ start: sb.startUnit, end: sb.endUnit });
+          if (!sbBar) return null;
+          // Stacked layout: lane index is determined by start-date order.
+          const stackIdx = showTall ? (laneIdxByKey.get(sb.id) ?? 0) : 0;
+          const style = { left: `${sbBar.leftPct}%`, width: `${sbBar.widthPct}%`, ...barStyle(showTall, stackIdx, sbBar) };
+          return (
+            <div key={sb.id} className="gantt-bar gantt-sub-bar" style={style}
+              onClick={(e) => { e.stopPropagation(); onOpen(); }}>
+              {!readOnly && !sbBar.clipLeft && (
+                <div className="gantt-resize-handle gantt-resize-left"
+                  onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "left", sb.id); }} />
+              )}
+              {!readOnly && (
+                <div className="gantt-bar-move-handle"
+                  onPointerDown={(e) => { e.stopPropagation(); onBarMoveStart(e, initiative.id, sb.id); }}
+                  title="Drag to move" />
+              )}
+              <span className="gantt-bar-label gantt-sub-bar-label" style={{ color: gc }}>{sb.label}</span>
+              {!readOnly && !sbBar.clipRight && (
+                <div className="gantt-resize-handle gantt-resize-right"
+                  onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "right", sb.id); }} />
+              )}
+            </div>
+          );
+        })}
+
+        {/* Draw ghost — shown during click-drag to create a new bar.
+            When the row is stacked (overlap), the ghost sits in the next stack
+            slot; otherwise it spans full height like a normal bar. */}
+        {ghost && (
+          <div className="gantt-bar gantt-draw-ghost" style={{
+            left: `${ghost.leftPct}%`, width: `${ghost.widthPct}%`,
+            ...(showTall
+              ? { top: stackTopForIdx(placedLanes.length), bottom: "auto", height: STACK_H }
+              : {}),
+            pointerEvents: "none",
+          }} />
         )}
       </div>
     </div>
@@ -672,6 +1023,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const [items, setItems] = useState<RoadmapInitiative[]>(initial);
   const [filterStatus, setFilterStatus] = useState<RoadmapStatus | "All">("All");
   const [filterGoal, setFilterGoal] = useState<string>("All");
+  const [filterTeam, setFilterTeam] = useState<RoadmapTeam | "All">("All");
   const [modal, setModal] = useState<RoadmapInitiative | null | "new">(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
@@ -682,16 +1034,48 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const [capturing, setCapturing] = useState(false);
   const snapshotRef = useRef<HTMLDivElement | null>(null);
 
+  // ── Draw state — click-drag on an empty track to sketch a new bar ────────────
+  const [drawingId, setDrawingId] = useState<string | null>(null);  // initiative id being drawn on
+  const [drawGhosts, setDrawGhosts] = useState<Record<string, { start: number; end: number }>>({});
+  const drawRef = useRef<{
+    id: string;
+    anchorUnit: number;
+    trackLeft: number;
+    trackWidth: number;
+    moved: boolean;
+  } | null>(null);
+  // After a draw completes we show a small naming modal for the new sub-bar.
+  const [pendingSubBar, setPendingSubBar] = useState<{
+    initiativeId: string;
+    startUnit: number;
+    endUnit: number;
+  } | null>(null);
+
   // ── Resize state ─────────────────────────────────────────────────────────────
-  // Tracks which bar is being dragged and its live preview span
   const [resizingId, setResizingId] = useState<string | null>(null);
+  const [resizingSubBarId, setResizingSubBarId] = useState<string | null>(null);
   const [resizePreview, setResizePreview] = useState<{ start: number; end: number } | null>(null);
   const resizeRef = useRef<{
     id: string;
+    subBarId?: string;
     side: "left" | "right";
-    fixedUnit: number;  // the unit edge that doesn't move
-    trackLeft: number;  // px offset of the track grid's left edge
-    trackWidth: number; // px width of the full track grid
+    fixedUnit: number;
+    trackLeft: number;
+    trackWidth: number;
+  } | null>(null);
+
+  // ── Move state ────────────────────────────────────────────────────────────────
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [movingSubBarId, setMovingSubBarId] = useState<string | null>(null);
+  const [movePreview, setMovePreview] = useState<{ start: number; end: number } | null>(null);
+  const moveRef = useRef<{
+    id: string;
+    subBarId: string | null;
+    originalStart: number;
+    originalEnd: number;
+    grabUnit: number;   // the unit position where the pointer initially landed
+    trackLeft: number;
+    trackWidth: number;
   } | null>(null);
   const ganttTableRef = useRef<HTMLDivElement | null>(null);
   const currentQIdx = currentQuarterIdx();
@@ -806,13 +1190,16 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   }
 
   // ── Resize pointer handlers ───────────────────────────────────────────────
-  // Tracks whether a resize actually moved, so the trailing cell click can be suppressed.
+  // Set true when a resize/move drag actually moved, so the trailing click on the
+  // bar (pointerdown→…→pointerup→click) is suppressed and doesn't open the modal.
   const resizeMovedRef = useRef(false);
+  const suppressBarClickRef = useRef(false);
 
   const onResizePointerDown = useCallback((
     e: React.PointerEvent,
     id: string,
     side: "left" | "right",
+    subBarId?: string,
   ) => {
     if (readOnly) return;
     e.preventDefault();
@@ -821,7 +1208,17 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
 
     const item = items.find((x) => x.id === id);
     if (!item) return;
-    const stored = spanUnitsOf(item);
+
+    // Resolve the span for either the primary bar or a sub-bar.
+    let stored: { start: number; end: number } | null = null;
+    if (subBarId) {
+      const sb = (item.subBars || []).find((x) => x.id === subBarId);
+      if (sb && sb.startUnit != null && sb.endUnit != null) {
+        stored = { start: sb.startUnit, end: sb.endUnit };
+      }
+    } else {
+      stored = spanUnitsOf(item);
+    }
     if (!stored) return;
 
     const trackEl = ganttTableRef.current.querySelector<HTMLElement>(".gantt-track-overlay");
@@ -833,9 +1230,10 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     // The edge that stays anchored while the other follows the pointer.
     const fixedUnit = side === "right" ? stored.start : stored.end;
 
-    resizeRef.current = { id, side, fixedUnit, trackLeft, trackWidth };
+    resizeRef.current = { id, subBarId, side, fixedUnit, trackLeft, trackWidth };
     resizeMovedRef.current = false;
     setResizingId(id);
+    setResizingSubBarId(subBarId ?? null);
     setResizePreview({ start: stored.start, end: stored.end });
 
     // Capture the pointer so we keep receiving moves even outside the handle.
@@ -857,7 +1255,6 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       const u = unitAt(ev.clientX, tl, tw);
       let newStart = s === "right" ? fixed : u;
       let newEnd   = s === "right" ? u : fixed;
-      // Keep a minimum width of one half-month.
       if (newEnd - newStart < 1) {
         if (s === "right") newEnd = newStart + 1;
         else newStart = newEnd - 1;
@@ -872,9 +1269,10 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       const ref = resizeRef.current;
       resizeRef.current = null;
       setResizingId(null);
+      setResizingSubBarId(null);
       setResizePreview(null);
       if (!ref) return;
-      const { fixedUnit: fixed, side: s, id: rid, trackLeft: tl, trackWidth: tw } = ref;
+      const { fixedUnit: fixed, side: s, id: rid, subBarId: sbid, trackLeft: tl, trackWidth: tw } = ref;
       const u = unitAt(ev.clientX, tl, tw);
       let finalStart = s === "right" ? fixed : u;
       let finalEnd   = s === "right" ? u : fixed;
@@ -882,12 +1280,100 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
         if (s === "right") finalEnd = finalStart + 1;
         else finalStart = finalEnd - 1;
       }
-      const orig = spanUnitsOf(item!);
-      if (!orig || finalStart !== orig.start || finalEnd !== orig.end) {
+      if (sbid) {
+        onSubBarSpanChange(rid, sbid, finalStart, finalEnd);
+      } else {
+        const orig = spanUnitsOf(item!);
+        if (!orig || finalStart !== orig.start || finalEnd !== orig.end) {
+          onSpanChange(rid, finalStart, finalEnd);
+        }
+      }
+      // Interacting with a handle should never open the modal, even on a no-move click.
+      suppressBarClickRef.current = true;
+      setTimeout(() => { resizeMovedRef.current = false; suppressBarClickRef.current = false; }, 0);
+    }
+
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  }, [items, readOnly, windowStartUnit, windowEndUnit]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Move pointer handler ──────────────────────────────────────────────────────
+  const onBarMoveStart = useCallback((
+    e: React.PointerEvent,
+    id: string,
+    subBarId: string | null,
+  ) => {
+    if (readOnly) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!ganttTableRef.current) return;
+
+    const item = items.find((x) => x.id === id);
+    if (!item) return;
+
+    let originalStart: number, originalEnd: number;
+    if (subBarId) {
+      const sb = (item.subBars || []).find((x) => x.id === subBarId);
+      if (!sb || sb.startUnit == null || sb.endUnit == null) return;
+      originalStart = sb.startUnit; originalEnd = sb.endUnit;
+    } else {
+      const stored = spanUnitsOf(item);
+      if (!stored) return;
+      originalStart = stored.start; originalEnd = stored.end;
+    }
+
+    const trackEl = ganttTableRef.current.querySelector<HTMLElement>(".gantt-track-overlay");
+    if (!trackEl) return;
+    const rect = trackEl.getBoundingClientRect();
+
+    function unitAt(clientX: number): number {
+      const frac = (clientX - rect.left) / rect.width;
+      const raw = windowStartUnit + frac * (windowEndUnit - windowStartUnit);
+      return Math.max(windowStartUnit, Math.min(windowEndUnit, Math.round(raw)));
+    }
+
+    const grabUnit = unitAt(e.clientX);
+    moveRef.current = { id, subBarId, originalStart, originalEnd, grabUnit, trackLeft: rect.left, trackWidth: rect.width };
+    setMovingId(id);
+    setMovingSubBarId(subBarId);
+    setMovePreview({ start: originalStart, end: originalEnd });
+
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
+
+    function onPointerMove(ev: PointerEvent) {
+      if (!moveRef.current) return;
+      const { originalStart: os, originalEnd: oe, grabUnit: gu } = moveRef.current;
+      const u = unitAt(ev.clientX);
+      const delta = u - gu;
+      const dur = oe - os;
+      const newStart = Math.max(windowStartUnit, Math.min(windowEndUnit - dur, os + delta));
+      setMovePreview({ start: newStart, end: newStart + dur });
+    }
+
+    function onPointerUp(ev: PointerEvent) {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      const ref = moveRef.current;
+      moveRef.current = null;
+      setMovingId(null);
+      setMovingSubBarId(null);
+      setMovePreview(null);
+      if (!ref) return;
+      const { originalStart: os, originalEnd: oe, grabUnit: gu, id: rid, subBarId: sbid } = ref;
+      const u = unitAt(ev.clientX);
+      const delta = u - gu;
+      const dur = oe - os;
+      const finalStart = Math.max(windowStartUnit, Math.min(windowEndUnit - dur, os + delta));
+      const finalEnd = finalStart + dur;
+      // Grabbing the move handle should never open the modal, even on a no-move click.
+      suppressBarClickRef.current = true;
+      setTimeout(() => { suppressBarClickRef.current = false; }, 0);
+      if (finalStart === os) return; // no movement
+      if (sbid) {
+        onSubBarSpanChange(rid, sbid, finalStart, finalEnd);
+      } else {
         onSpanChange(rid, finalStart, finalEnd);
       }
-      // Suppress the click that fires right after pointerup on the underlying track.
-      setTimeout(() => { resizeMovedRef.current = false; }, 0);
     }
 
     document.addEventListener("pointermove", onPointerMove);
@@ -950,6 +1436,114 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     }
   }
 
+  async function onSubBarSpanChange(id: string, subBarId: string, startUnit: number, endUnit: number) {
+    setItems((prev) => prev.map((x) => {
+      if (x.id !== id) return x;
+      const subBars = (x.subBars || []).map((sb) =>
+        sb.id === subBarId ? { ...sb, startUnit, endUnit } : sb
+      );
+      return { ...x, subBars };
+    }));
+    const item = items.find((x) => x.id === id);
+    if (!item) return;
+    const subBars = (item.subBars || []).map((sb) =>
+      sb.id === subBarId ? { ...sb, startUnit, endUnit } : sb
+    );
+    try {
+      const res = await fetch(`/api/roadmap-initiatives/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subBars }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
+      setItems((prev) => prev.map((x) => (x.id === id ? data.initiative : x)));
+    } catch (e: unknown) {
+      flash(e instanceof Error ? e.message : "Update failed", true);
+    }
+  }
+
+  // ── Draw gesture ─────────────────────────────────────────────────────────────
+  // pointerdown on the track: if the pointer lands on an existing bar, let that
+  // bar's own onClick handle it. Otherwise start a draw gesture.
+  const onTrackPointerDown = useCallback((e: React.PointerEvent, id: string) => {
+    if (readOnly) return;
+    // Only left button, and only when the target is the track/cell background
+    // (not a bar element — bars have their own onClick).
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest(".gantt-bar") || target.closest(".gantt-resize-handle")) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const trackEl = (e.currentTarget as HTMLElement);
+    const rect = trackEl.getBoundingClientRect();
+
+    function unitAt(clientX: number): number {
+      const frac = (clientX - rect.left) / rect.width;
+      const raw = windowStartUnit + frac * (windowEndUnit - windowStartUnit);
+      return Math.max(windowStartUnit, Math.min(windowEndUnit, Math.round(raw)));
+    }
+
+    const anchorUnit = unitAt(e.clientX);
+    drawRef.current = { id, anchorUnit, trackLeft: rect.left, trackWidth: rect.width, moved: false };
+    setDrawingId(id);
+    setDrawGhosts((prev) => ({ ...prev, [id]: { start: anchorUnit, end: anchorUnit + 1 } }));
+
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
+
+    function onPointerMove(ev: PointerEvent) {
+      if (!drawRef.current || drawRef.current.id !== id) return;
+      const u = unitAt(ev.clientX);
+      const start = Math.min(drawRef.current.anchorUnit, u);
+      const end   = Math.max(drawRef.current.anchorUnit, u);
+      if (end - start >= 1) drawRef.current.moved = true;
+      setDrawGhosts((prev) => ({ ...prev, [id]: { start, end: Math.max(end, start + 1) } }));
+    }
+
+    function onPointerUp(ev: PointerEvent) {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      const ref = drawRef.current;
+      drawRef.current = null;
+      setDrawingId(null);
+      setDrawGhosts((prev) => { const n = { ...prev }; delete n[id]; return n; });
+      if (!ref) return;
+
+      const u = unitAt(ev.clientX);
+      const start = Math.min(ref.anchorUnit, u);
+      const end   = Math.max(ref.anchorUnit, u);
+      const finalEnd = Math.max(end, start + 1);
+
+      if (!ref.moved) {
+        // Short tap — open the initiative detail modal if it has any bar, else ignore.
+        const item = items.find((x) => x.id === id);
+        if (item) {
+          const hasPrimary = spanUnitsOf(item) != null;
+          const hasSub = (item.subBars || []).some((sb) => sb.startUnit != null);
+          if (hasPrimary || hasSub) setModal(item);
+        }
+        return;
+      }
+
+      // Dragged — check if the initiative already has a primary bar.
+      const item = items.find((x) => x.id === id);
+      const hasPrimary = item ? spanUnitsOf(item) != null : false;
+
+      if (!hasPrimary) {
+        // Place the primary bar directly (no name needed, it inherits the initiative name).
+        onSpanChange(id, start, finalEnd);
+      } else {
+        // Queue up a new sub-bar pending a name.
+        setPendingSubBar({ initiativeId: id, startUnit: start, endUnit: finalEnd });
+      }
+    }
+
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+  }, [readOnly, items, windowStartUnit, windowEndUnit]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function persistOrder(id: string, order: number) {
     try {
       await fetch(`/api/roadmap-initiatives/${id}`, {
@@ -1008,6 +1602,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       const gn = i.strategyGoal ? SUBGOAL_TO_GOAL[i.strategyGoal as StrategyGoal] : null;
       if (gn !== filterGoal) return false;
     }
+    if (filterTeam !== "All" && i.team !== filterTeam) return false;
     return true;
   });
 
@@ -1028,7 +1623,8 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
 
   const newInitiative: RoadmapInitiative = {
     id: "__new__", summary: "", name: "", strategyGoal: "", status: "Planned",
-    description: "", owner: "", quarter: "", endQuarter: "", startUnit: null, endUnit: null,
+    description: "", owner: "", team: "", quarter: "", endQuarter: "", startUnit: null, endUnit: null,
+    mainBarLabel: "", subBars: [], northStarMetric: "", successMetrics: "",
     notes: "", comments: [], order: 999,
   };
   const modalInitiative = modal === "new" ? newInitiative : modal;
@@ -1131,6 +1727,15 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
             <option value="1">Goal 1 · UK visibility</option>
             <option value="2">Goal 2 · Global hubs</option>
             <option value="3">Goal 3 · Depth &amp; defensibility</option>
+          </select>
+        </div>
+        <div className="filter-group">
+          <span className="filter-label">Team</span>
+          <select className="select" value={filterTeam} onChange={(e) => setFilterTeam(e.target.value as RoadmapTeam | "All")}>
+            <option value="All">All teams</option>
+            {ROADMAP_TEAM_OPTIONS.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
           </select>
         </div>
         <span className="rm-count">{filtered.length} initiative{filtered.length !== 1 ? "s" : ""}</span>
@@ -1249,16 +1854,24 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
             <div className="gantt-header-row">
               <div className="gantt-label-cell gantt-header-label">Initiative</div>
               <div className="gantt-track-grid" style={{ gridTemplateColumns: `repeat(${months.length}, var(--gantt-col-w))` }}>
-                {months.map((col) => (
-                  <div
-                    key={`${col.year}-${col.monthIdx}`}
-                    className={`gantt-cell gantt-header-cell${col.isQuarterStart ? " gantt-quarter-start" : ""}`}
-                  >
-                    <span className="gantt-m-label">
-                      {view === "1M" ? col.fullLabel : col.label}
-                    </span>
-                  </div>
-                ))}
+                {months.map((col, mi) => {
+                  const isActiveQ = col.quarterIdx === currentQIdx;
+                  const monthInQ = mi - months.findIndex((m) => m.quarterIdx === col.quarterIdx);
+                  const horizon = isActiveQ ? QUARTER_MONTH_HORIZON[monthInQ] : null;
+                  return (
+                    <div
+                      key={`${col.year}-${col.monthIdx}`}
+                      className={`gantt-cell gantt-header-cell${col.isQuarterStart ? " gantt-quarter-start" : ""}${isActiveQ ? " gantt-active-q-col" : ""}`}
+                    >
+                      <span className="gantt-m-label">
+                        {view === "1M" ? col.fullLabel : col.label}
+                      </span>
+                      {horizon && (
+                        <span className="gantt-horizon-label">{horizon}</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1314,12 +1927,18 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                                   months={months}
                                   windowStartUnit={windowStartUnit}
                                   windowEndUnit={windowEndUnit}
-                                  onOpen={() => setModal(item)}
+                                  onOpen={() => { if (!suppressBarClickRef.current) setModal(item); }}
                                   onSpanChange={onSpanChange}
+                                  onSubBarSpanChange={onSubBarSpanChange}
+                                  onTrackPointerDown={onTrackPointerDown}
+                                  onBarMoveStart={onBarMoveStart}
                                   readOnly={readOnly}
                                   resizePreview={resizingId === item.id ? resizePreview : null}
-                                  wasResizing={() => resizeMovedRef.current}
+                                  resizingSubBarId={resizingId === item.id ? resizingSubBarId : null}
+                                  movePreview={movingId === item.id ? movePreview : null}
+                                  movingSubBarId={movingId === item.id ? movingSubBarId : null}
                                   onResizeStart={onResizePointerDown}
+                                  drawGhost={drawingId === item.id ? drawGhosts[item.id] ?? null : null}
                                   dragHandleProps={drag.dragHandleProps ?? undefined}
                                 />
                               </div>
@@ -1346,6 +1965,37 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
           onSaved={onSaved}
           onDeleted={onDeleted}
           readOnly={readOnly}
+        />
+      )}
+
+      {pendingSubBar && (
+        <SubBarNameModal
+          onConfirm={(label) => {
+            const { initiativeId, startUnit, endUnit } = pendingSubBar;
+            setPendingSubBar(null);
+            const newBar: RoadmapSubBar = {
+              id: `sb-${Date.now()}`,
+              label,
+              startUnit,
+              endUnit,
+            };
+            const item = items.find((x) => x.id === initiativeId);
+            if (!item) return;
+            const subBars = [...(item.subBars || []), newBar];
+            setItems((prev) => prev.map((x) => x.id === initiativeId ? { ...x, subBars } : x));
+            fetch(`/api/roadmap-initiatives/${initiativeId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ subBars }),
+            })
+              .then((r) => r.json())
+              .then((d) => {
+                if (d.ok) setItems((prev) => prev.map((x) => x.id === initiativeId ? d.initiative : x));
+                else flash(d.error || "Save failed", true);
+              })
+              .catch(() => flash("Save failed", true));
+          }}
+          onCancel={() => setPendingSubBar(null)}
         />
       )}
 
