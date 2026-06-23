@@ -39,6 +39,9 @@ html, body {
   background-attachment: fixed;
   min-height: 100vh;
 }
+/* Guard against full-bleed 100vw + scrollbar overflow. Kept on html (the scroll
+   root) so it doesn't interfere with position: sticky inside the page. */
+html { overflow-x: hidden; }
 select, button, input, textarea { font: inherit; }
 ::selection { background: rgba(79,70,229,0.16); }
 
@@ -855,7 +858,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
   position: fixed; inset: 0;
   background: rgba(15,23,42,0.55);
   display: flex; align-items: center; justify-content: center;
-  padding: 20px; z-index: 100;
+  padding: 20px; z-index: 1000;
   backdrop-filter: blur(4px);
   animation: fadeIn 0.16s ease;
 }
@@ -1762,18 +1765,24 @@ a.link:hover { text-decoration: underline; }
   align-items: center;
   gap: 0;
   background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: none;
+  border-bottom: 1px solid var(--line);
   box-shadow: var(--shadow-sm);
-  margin: 12px 0 14px;
-  padding: 0 12px;
+  /* Full-bleed: break out of .app-shell's max-width + side padding so the bar
+     spans the entire viewport width while its content stays aligned. */
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-bottom: 16px;
+  /* Align inner content to the shell's content edge: 16px gutter plus the space
+     outside the 1480px max-width on wide viewports. */
+  padding: 0 calc(16px + max(0px, (100vw - 1480px) / 2));
   height: 52px;
   position: sticky;
-  top: 8px;
+  top: 0;
   z-index: 200;
 }
 @media (min-width: 640px) {
-  .app-tabs { margin: 20px 0 16px; padding: 0 18px; }
+  .app-tabs { padding: 0 calc(24px + max(0px, (100vw - 1480px) / 2)); }
 }
 .app-tabs-brand {
   display: flex;
