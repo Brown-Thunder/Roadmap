@@ -3464,15 +3464,43 @@ a.link:hover { text-decoration: underline; }
   flex-direction: column;
   gap: 6px;
 }
+.rmi-workstream {
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.rmi-workstream.expanded { background: #fff; border-color: #cbd5e1; }
 .rmi-workstream-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: #f8fafc;
-  border-radius: 8px;
-  border: 1px solid var(--line);
 }
+/* Toggle button wraps the caret + dot + label and drives expand/collapse. */
+.rmi-workstream-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 5px;
+  font: inherit;
+  text-align: left;
+}
+.rmi-workstream-toggle:hover { background: #eef2ff; }
+.rmi-workstream-caret {
+  color: #94a3b8;
+  font-size: 11px;
+  transition: transform 0.12s ease;
+  flex-shrink: 0;
+}
+.rmi-workstream-caret.open { transform: rotate(90deg); }
 .rmi-workstream-dot {
   width: 8px;
   height: 8px;
@@ -3483,26 +3511,10 @@ a.link:hover { text-decoration: underline; }
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
-  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.rmi-workstream-label-btn {
-  background: none;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-  padding: 2px 4px;
-  margin: -2px -4px;
-  border-radius: 5px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.rmi-workstream-label-btn:not(:disabled):hover { background: #eef2ff; }
-.rmi-workstream-label-btn:disabled { cursor: default; }
 .rmi-workstream-rename-input {
   flex: 1;
   font-size: 13px;
@@ -3513,19 +3525,56 @@ a.link:hover { text-decoration: underline; }
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
+  flex-shrink: 0;
 }
+.rmi-workstream-icon-btn,
 .rmi-workstream-delete {
   background: none;
   border: none;
   cursor: pointer;
   color: #94a3b8;
   font-size: 13px;
-  padding: 2px 4px;
+  padding: 2px 5px;
   border-radius: 4px;
   line-height: 1;
   flex-shrink: 0;
 }
+.rmi-workstream-icon-btn:hover { color: var(--accent); background: #eef2ff; }
 .rmi-workstream-delete:hover { color: #ef4444; background: #fef2f2; }
+/* Expanded detail panel */
+.rmi-workstream-detail {
+  padding: 4px 12px 12px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  margin-top: 2px;
+}
+.rmi-ws-field { display: flex; flex-direction: column; gap: 2px; }
+.rmi-ws-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+.rmi-ws-field-value {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.rmi-ws-empty {
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+}
+/* Workstream detail modal */
+.ws-modal { max-width: 480px; }
+.ws-parent-link {
+  font-size: 13px;
+  font-weight: 600;
+}
 
 /* ── Sub-bar editor rows in the modal ── */
 .rmi-subbar-row {

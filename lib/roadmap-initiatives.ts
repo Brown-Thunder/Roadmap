@@ -64,12 +64,15 @@ export interface RoadmapComment {
   createdAt: string; // ISO string
 }
 
-// A secondary bar overlaid on the same Gantt row (e.g. "Web", "V2").
+// A secondary bar / workstream on the same Gantt row (e.g. "Web", "V2").
 export interface RoadmapSubBar {
   id: string;
   label: string;
   startUnit: number | null;
   endUnit: number | null;
+  description?: string;       // workstream-specific description
+  northStarMetric?: string;   // workstream-specific north star metric
+  successMetrics?: string;    // how this workstream's success is tracked
 }
 
 export interface RoadmapInitiative {

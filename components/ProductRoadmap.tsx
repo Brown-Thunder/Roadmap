@@ -218,6 +218,8 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
   // Inline rename of a workstream from view mode. "__main__" = the primary bar.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  // Which workstream row is expanded to reveal its details (null = none).
+  const [expandedWsId, setExpandedWsId] = useState<string | null>(null);
 
   const statusStyle = STATUS_STYLES[form.status] ?? STATUS_STYLES["Planned"];
   const gn = goalNum(form.strategyGoal);
@@ -580,50 +582,92 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
           const subs = initiative.subBars || [];
           if (!hasPrimary && subs.length === 0) return null;
 
+          // One workstream row, expandable to reveal date / description / metrics.
           const rowFor = (
             key: string,
             currentLabel: string,
             span: { start: number; end: number } | null,
-            renameKey: string | null, // null = not renamable
+            renameKey: string | null,           // null = not renamable
             renameSeed: string,
+            details: { description?: string; northStarMetric?: string; successMetrics?: string },
             onDelete?: () => void,
-          ) => (
-            <div key={key} className="rmi-workstream-row">
-              <span className="rmi-workstream-dot" style={{ background: gc2 }} />
-              {renameKey && renamingId === renameKey ? (
-                <input
-                  className="input rmi-workstream-rename-input"
-                  autoFocus
-                  value={renameDraft}
-                  onChange={(e) => setRenameDraft(e.target.value)}
-                  onBlur={commitRename}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename();
-                    if (e.key === "Escape") setRenamingId(null);
-                  }}
-                />
-              ) : (
-                <button
-                  className="rmi-workstream-label rmi-workstream-label-btn"
-                  disabled={readOnly || !renameKey}
-                  title={readOnly || !renameKey ? undefined : "Click to rename"}
-                  onClick={() => {
-                    if (readOnly || !renameKey) return;
-                    setRenameDraft(renameSeed);
-                    setRenamingId(renameKey);
-                  }}
-                >
-                  {currentLabel}
-                </button>
-              )}
-              {span && (
-                <span className="rmi-workstream-range">{unitRangeLabel(span.start, span.end)}</span>
-              )}
-              {!readOnly && onDelete && (
-                <button className="rmi-workstream-delete" title="Delete this workstream" onClick={onDelete}>✕</button>
-              )}
-            </div>
-          );
+          ) => {
+            const expanded = expandedWsId === key;
+            const hasDetails = !!(span || details.description || details.northStarMetric || details.successMetrics);
+            return (
+              <div key={key} className={`rmi-workstream${expanded ? " expanded" : ""}`}>
+                <div className="rmi-workstream-row">
+                  <button
+                    className="rmi-workstream-toggle"
+                    aria-expanded={expanded}
+                    title={expanded ? "Collapse" : "Expand"}
+                    onClick={() => setExpandedWsId(expanded ? null : key)}
+                  >
+                    <span className={`rmi-workstream-caret${expanded ? " open" : ""}`}>▸</span>
+                    <span className="rmi-workstream-dot" style={{ background: gc2 }} />
+                    {renameKey && renamingId === renameKey ? (
+                      <input
+                        className="input rmi-workstream-rename-input"
+                        autoFocus
+                        value={renameDraft}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename();
+                          if (e.key === "Escape") setRenamingId(null);
+                        }}
+                      />
+                    ) : (
+                      <span className="rmi-workstream-label">{currentLabel}</span>
+                    )}
+                  </button>
+                  {span && (
+                    <span className="rmi-workstream-range">{unitRangeLabel(span.start, span.end)}</span>
+                  )}
+                  {!readOnly && renameKey && renamingId !== renameKey && (
+                    <button
+                      className="rmi-workstream-icon-btn"
+                      title="Rename"
+                      onClick={() => { setRenameDraft(renameSeed); setRenamingId(renameKey); }}
+                    >✎</button>
+                  )}
+                  {!readOnly && onDelete && (
+                    <button className="rmi-workstream-delete" title="Delete this workstream" onClick={onDelete}>✕</button>
+                  )}
+                </div>
+                {expanded && (
+                  <div className="rmi-workstream-detail">
+                    {span && (
+                      <div className="rmi-ws-field">
+                        <span className="rmi-ws-field-label">Dates</span>
+                        <span className="rmi-ws-field-value">{unitRangeLabel(span.start, span.end)}</span>
+                      </div>
+                    )}
+                    {details.description && (
+                      <div className="rmi-ws-field">
+                        <span className="rmi-ws-field-label">Description</span>
+                        <span className="rmi-ws-field-value">{details.description}</span>
+                      </div>
+                    )}
+                    {details.northStarMetric && (
+                      <div className="rmi-ws-field">
+                        <span className="rmi-ws-field-label">North star metric</span>
+                        <span className="rmi-ws-field-value">{details.northStarMetric}</span>
+                      </div>
+                    )}
+                    {details.successMetrics && (
+                      <div className="rmi-ws-field">
+                        <span className="rmi-ws-field-label">Success metrics</span>
+                        <span className="rmi-ws-field-value">{details.successMetrics}</span>
+                      </div>
+                    )}
+                    {!hasDetails && <div className="rmi-ws-empty">No additional details.</div>}
+                  </div>
+                )}
+              </div>
+            );
+          };
 
           return (
             <div className="modal-section">
@@ -635,6 +679,38 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                   { start: initiative.startUnit!, end: initiative.endUnit! },
                   "__main__",
                   initiative.mainBarLabel || "",
+                  { description: initiative.description, northStarMetric: initiative.northStarMetric, successMetrics: initiative.successMetrics },
+                  async () => {
+                    const lbl = initiative.mainBarLabel || initiative.name;
+                    if (!confirm(`Delete workstream "${lbl}"?`)) return;
+                    // Clearing the initiative's own bar: drop its placed span. If there
+                    // are sub-bars, promote the earliest-starting one to the initiative's
+                    // span so the initiative keeps a bar on the roadmap.
+                    const placed = subs
+                      .filter((sb) => sb.startUnit != null && sb.endUnit != null)
+                      .sort((a, b) => a.startUnit! - b.startUnit! || a.endUnit! - b.endUnit!);
+                    if (placed.length > 0) {
+                      const promote = placed[0];
+                      const remaining = subs.filter((sb) => sb.id !== promote.id);
+                      const sq = Math.floor(promote.startUnit! / UNITS_PER_QUARTER);
+                      const eq = Math.floor((promote.endUnit! - 1) / UNITS_PER_QUARTER);
+                      await patchInitiative({
+                        mainBarLabel: promote.label || "",
+                        description: promote.description || "",
+                        northStarMetric: promote.northStarMetric || "",
+                        successMetrics: promote.successMetrics || "",
+                        startUnit: promote.startUnit,
+                        endUnit: promote.endUnit,
+                        quarter: QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, sq))],
+                        endQuarter: eq > sq ? QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, eq))] : "",
+                        subBars: remaining,
+                      });
+                    } else {
+                      await patchInitiative({
+                        startUnit: null, endUnit: null, quarter: "", endQuarter: "",
+                      });
+                    }
+                  },
                 )}
                 {subs.map((sb) =>
                   rowFor(
@@ -643,6 +719,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                     sb.startUnit != null && sb.endUnit != null ? { start: sb.startUnit, end: sb.endUnit } : null,
                     sb.id,
                     sb.label || "",
+                    { description: sb.description, northStarMetric: sb.northStarMetric, successMetrics: sb.successMetrics },
                     async () => {
                       if (!confirm(`Delete workstream "${sb.label || "Unlabelled"}"?`)) return;
                       const next = subs.filter((x) => x.id !== sb.id);
@@ -709,6 +786,167 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
           <div style={{ flex: 1 }} />
           <button className="btn btn-soft" onClick={onClose}>Close</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Workstream detail modal ───────────────────────────────────────────────────
+// Opened by clicking a workstream (sub-bar) directly in the Gantt row. Shows that
+// workstream's own dates / description / metrics, with a link back to the parent.
+
+function WorkstreamModal({
+  initiative,
+  subBar,
+  isMain = false,
+  readOnly,
+  onClose,
+  onSaved,
+  onOpenInitiative,
+}: {
+  initiative: RoadmapInitiative;
+  subBar: RoadmapSubBar;
+  isMain?: boolean;
+  readOnly?: boolean;
+  onClose: () => void;
+  onSaved: (i: RoadmapInitiative) => void;
+  onOpenInitiative: () => void;
+}) {
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [form, setForm] = useState<RoadmapSubBar>({ ...subBar });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const gc = goalColor(initiative);
+
+  const span = form.startUnit != null && form.endUnit != null
+    ? { start: form.startUnit, end: form.endUnit } : null;
+
+  function set(key: keyof RoadmapSubBar, value: unknown) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function save() {
+    setBusy(true); setError(null);
+    try {
+      // The initiative's own bar saves into the initiative's fields; sub-bars into subBars.
+      const payload: Partial<RoadmapInitiative> = isMain
+        ? {
+            mainBarLabel: form.label.trim(),
+            description: form.description || "",
+            northStarMetric: form.northStarMetric || "",
+            successMetrics: form.successMetrics || "",
+          }
+        : {
+            subBars: (initiative.subBars || []).map((sb) =>
+              sb.id === subBar.id ? { ...form, label: form.label.trim() || "Unlabelled" } : sb
+            ),
+          };
+      const res = await fetch(`/api/roadmap-initiatives/${initiative.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
+      onSaved(data.initiative);
+      setMode("view");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal rmi-modal ws-modal" onClick={(e) => e.stopPropagation()}>
+        <div style={{ height: 4, background: gc, borderRadius: "18px 18px 0 0" }} />
+        <div className="modal-header">
+          <div className="modal-header-left">
+            <h2>{form.label || "Workstream"}</h2>
+            <div className="modal-subtitle">
+              <span>Workstream in </span>
+              <button className="btn-link ws-parent-link" onClick={onOpenInitiative}>{initiative.name}</button>
+            </div>
+          </div>
+          <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        {mode === "view" ? (
+          <>
+            <div className="modal-badges">
+              {span && <span className="meta-badge tf">{unitRangeLabel(span.start, span.end)}</span>}
+            </div>
+            {!readOnly && (
+              <div className="modal-action-bar">
+                <button className="btn primary" onClick={() => setMode("edit")}>Edit</button>
+              </div>
+            )}
+            {form.description && (
+              <div className="modal-section">
+                <p className="rmi-section-label">Description</p>
+                <p className="modal-desc">{form.description}</p>
+              </div>
+            )}
+            {form.northStarMetric && (
+              <div className="modal-section">
+                <p className="rmi-section-label">North star metric</p>
+                <div className="rmi-north-star-metric">{form.northStarMetric}</div>
+              </div>
+            )}
+            {form.successMetrics && (
+              <div className="modal-section">
+                <p className="rmi-section-label">Success metrics</p>
+                <div className="modal-notes">{form.successMetrics}</div>
+              </div>
+            )}
+            {!form.description && !form.northStarMetric && !form.successMetrics && (
+              <div className="modal-section">
+                <div className="rmi-ws-empty">No details yet.{!readOnly && " Click Edit to add some."}</div>
+              </div>
+            )}
+            <div className="modal-actions">
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-soft" onClick={onClose}>Close</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="modal-body rmi-body">
+              {error && <div className="field-error rmi-error">{error}</div>}
+              <div className="rmi-section">
+                <div className="field">
+                  <label className="field-label">Workstream name</label>
+                  <input className="input" value={form.label}
+                    onChange={(e) => set("label", e.target.value)} placeholder="e.g. Web, App, V2" />
+                </div>
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label className="field-label">Description</label>
+                  <textarea className="textarea" rows={2} value={form.description || ""}
+                    onChange={(e) => set("description", e.target.value)}
+                    placeholder="What does this workstream cover?" />
+                </div>
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label className="field-label">North star metric</label>
+                  <input className="input" value={form.northStarMetric || ""}
+                    onChange={(e) => set("northStarMetric", e.target.value)}
+                    placeholder="Headline metric this workstream moves" />
+                </div>
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label className="field-label">Success metrics</label>
+                  <textarea className="textarea" rows={2} value={form.successMetrics || ""}
+                    onChange={(e) => set("successMetrics", e.target.value)}
+                    placeholder="How we'll track this workstream's success" />
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-soft" onClick={() => { setForm({ ...subBar }); setMode("view"); }}>Cancel</button>
+              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -793,7 +1031,8 @@ function GanttRow({
   months: MonthCol[];
   windowStartUnit: number;
   windowEndUnit: number;
-  onOpen: () => void;
+  // subBarId = null → open the initiative; a sub-bar id → open that workstream.
+  onOpen: (subBarId: string | null) => void;
   onSpanChange: (id: string, startUnit: number, endUnit: number) => void;
   onSubBarSpanChange: (id: string, subBarId: string, startUnit: number, endUnit: number) => void;
   onTrackPointerDown: (e: React.PointerEvent, id: string) => void;
@@ -922,7 +1161,7 @@ function GanttRow({
       >
         {!readOnly && <span className="gantt-drag-grip" title="Drag to reorder" aria-hidden>⠿</span>}
         <span className="gantt-dot" style={{ background: ss.dot }} title={initiative.status} />
-        <span className="gantt-row-name" onClick={(e) => { e.stopPropagation(); onOpen(); }} role="button" title="View details">
+        <span className="gantt-row-name" onClick={(e) => { e.stopPropagation(); onOpen(null); }} role="button" title="View details">
           {initiative.name}
         </span>
         {initiative.team && <span className="gantt-team-chip">{initiative.team}</span>}
@@ -945,7 +1184,7 @@ function GanttRow({
           const stackIdx = laneIdxByKey.get(PRIMARY_KEY) ?? 0;
           const style = { left: `${bar.leftPct}%`, width: `${bar.widthPct}%`, ...barStyle(showTall, stackIdx, bar) };
           return (
-            <div className="gantt-bar" style={style} onClick={(e) => { e.stopPropagation(); onOpen(); }}>
+            <div className="gantt-bar" style={style} onClick={(e) => { e.stopPropagation(); onOpen("__main__"); }}>
               {!readOnly && !bar.clipLeft && (
                 <div className="gantt-resize-handle gantt-resize-left"
                   onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "left"); }} />
@@ -974,7 +1213,7 @@ function GanttRow({
           const style = { left: `${sbBar.leftPct}%`, width: `${sbBar.widthPct}%`, ...barStyle(showTall, stackIdx, sbBar) };
           return (
             <div key={sb.id} className="gantt-bar gantt-sub-bar" style={style}
-              onClick={(e) => { e.stopPropagation(); onOpen(); }}>
+              onClick={(e) => { e.stopPropagation(); onOpen(sb.id); }}>
               {!readOnly && !sbBar.clipLeft && (
                 <div className="gantt-resize-handle gantt-resize-left"
                   onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "left", sb.id); }} />
@@ -1025,6 +1264,8 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const [filterGoal, setFilterGoal] = useState<string>("All");
   const [filterTeam, setFilterTeam] = useState<RoadmapTeam | "All">("All");
   const [modal, setModal] = useState<RoadmapInitiative | null | "new">(null);
+  // Dedicated workstream modal: which sub-bar of which initiative to show.
+  const [workstreamModal, setWorkstreamModal] = useState<{ initiativeId: string; subBarId: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
   const [isPublished, setIsPublished] = useState(published);
@@ -1340,6 +1581,8 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
 
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* noop */ }
 
+    let moved = false;
+
     function onPointerMove(ev: PointerEvent) {
       if (!moveRef.current) return;
       const { originalStart: os, originalEnd: oe, grabUnit: gu } = moveRef.current;
@@ -1347,6 +1590,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       const delta = u - gu;
       const dur = oe - os;
       const newStart = Math.max(windowStartUnit, Math.min(windowEndUnit - dur, os + delta));
+      if (newStart !== os) moved = true;
       setMovePreview({ start: newStart, end: newStart + dur });
     }
 
@@ -1365,10 +1609,10 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       const dur = oe - os;
       const finalStart = Math.max(windowStartUnit, Math.min(windowEndUnit - dur, os + delta));
       const finalEnd = finalStart + dur;
-      // Grabbing the move handle should never open the modal, even on a no-move click.
+      if (finalStart === os || !moved) return; // a plain click → let the bar's onClick open the modal
+      // Only suppress the trailing click when the bar actually moved.
       suppressBarClickRef.current = true;
       setTimeout(() => { suppressBarClickRef.current = false; }, 0);
-      if (finalStart === os) return; // no movement
       if (sbid) {
         onSubBarSpanChange(rid, sbid, finalStart, finalEnd);
       } else {
@@ -1927,7 +2171,11 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                                   months={months}
                                   windowStartUnit={windowStartUnit}
                                   windowEndUnit={windowEndUnit}
-                                  onOpen={() => { if (!suppressBarClickRef.current) setModal(item); }}
+                                  onOpen={(subBarId) => {
+                                    if (suppressBarClickRef.current) return;
+                                    if (subBarId) setWorkstreamModal({ initiativeId: item.id, subBarId });
+                                    else setModal(item);
+                                  }}
                                   onSpanChange={onSpanChange}
                                   onSubBarSpanChange={onSubBarSpanChange}
                                   onTrackPointerDown={onTrackPointerDown}
@@ -1967,6 +2215,37 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
           readOnly={readOnly}
         />
       )}
+
+      {workstreamModal && (() => {
+        const ws = items.find((x) => x.id === workstreamModal.initiativeId);
+        if (!ws) return null;
+        const isMain = workstreamModal.subBarId === "__main__";
+        // The initiative's own bar is shown through the same modal as a synthesised
+        // workstream backed by the initiative's own fields.
+        const sb: RoadmapSubBar | undefined = isMain
+          ? {
+              id: "__main__",
+              label: ws.mainBarLabel || ws.name,
+              startUnit: ws.startUnit,
+              endUnit: ws.endUnit,
+              description: ws.description,
+              northStarMetric: ws.northStarMetric,
+              successMetrics: ws.successMetrics,
+            }
+          : ws.subBars?.find((s) => s.id === workstreamModal.subBarId);
+        if (!sb) return null;
+        return (
+          <WorkstreamModal
+            initiative={ws}
+            subBar={sb}
+            isMain={isMain}
+            readOnly={readOnly}
+            onClose={() => setWorkstreamModal(null)}
+            onSaved={(i) => { onSaved(i); }}
+            onOpenInitiative={() => { setWorkstreamModal(null); setModal(ws); }}
+          />
+        );
+      })()}
 
       {pendingSubBar && (
         <SubBarNameModal
