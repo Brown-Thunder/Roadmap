@@ -1371,33 +1371,85 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     setTimeout(() => setToast(null), 3000);
   }
 
-  // ── Snapshot (export the full roadmap as an image) ──────────────────────────
+  // ── Snapshot — capture the currently visible view of the roadmap ─────────────
+  // Renders the full timeline once, then crops the result to the window the user
+  // is actually looking at: the frozen label column plus the months currently
+  // scrolled into view at the current zoom, across the full height of all rows.
   async function captureBlob(): Promise<Blob> {
     const el = snapshotRef.current;
     if (!el) throw new Error("Nothing to capture");
-    // Capture the full scroll width/height, not just the visible viewport.
-    const width = el.scrollWidth;
-    const height = el.scrollHeight;
-    // Clamp the output so a wide timeline (e.g. 1M zoom ≈ 9,500px) doesn't try to
-    // rasterise a ~19,000px canvas and crash on memory-limited devices.
+
+    const fullWidth = el.scrollWidth;
+    const fullHeight = el.scrollHeight;
+    const viewW = el.clientWidth;
+    const scrollLeft = el.scrollLeft;
+    // Width of the frozen label column (always shown, regardless of scroll).
+    const labelCell = el.querySelector<HTMLElement>(".gantt-label-cell");
+    const labelW = labelCell ? labelCell.getBoundingClientRect().width : 0;
+
+    // Clamp output so very wide/tall snapshots don't crash memory-limited devices.
     const MAX_CANVAS_PX = 12000;
-    const pixelRatio = Math.min(2, MAX_CANVAS_PX / Math.max(width, height, 1));
+    const pixelRatio = Math.min(2, MAX_CANVAS_PX / Math.max(fullWidth, fullHeight, 1));
+
+    // Render the entire timeline to an image first.
     const dataUrl = await toPng(el, {
       backgroundColor: "#ffffff",
       pixelRatio,
       cacheBust: true,
-      width,
-      height,
-      // Render the whole content even if it's horizontally scrolled.
-      style: { overflow: "visible", width: `${width}px`, height: `${height}px` },
-      // Drop interactive-only chrome (resize/drag grips) from the image.
+      width: fullWidth,
+      height: fullHeight,
+      style: { overflow: "visible", width: `${fullWidth}px`, height: `${fullHeight}px` },
       filter: (node) =>
         !(node instanceof HTMLElement &&
           (node.classList.contains("gantt-resize-handle") ||
            node.classList.contains("gantt-drag-grip"))),
     });
-    const res = await fetch(dataUrl);
-    return res.blob();
+
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = dataUrl;
+    });
+
+    // Crop to: [label column] + [visible month window starting at scrollLeft].
+    // The visible window excludes the label column width.
+    const monthWinW = Math.max(0, viewW - labelW);
+    const outCssW = labelW + monthWinW;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(outCssW * pixelRatio);
+    canvas.height = Math.round(fullHeight * pixelRatio);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const pr = pixelRatio;
+    // 1) Frozen label column from the far left of the full render.
+    if (labelW > 0) {
+      ctx.drawImage(
+        img,
+        0, 0, labelW * pr, fullHeight * pr,        // src: label column
+        0, 0, labelW * pr, fullHeight * pr,        // dest
+      );
+    }
+    // 2) The visible month window, sourced starting after the label + scrollLeft.
+    if (monthWinW > 0) {
+      const srcX = (labelW + scrollLeft) * pr;
+      const srcW = Math.min(monthWinW * pr, img.width - srcX);
+      if (srcW > 0) {
+        ctx.drawImage(
+          img,
+          srcX, 0, srcW, fullHeight * pr,          // src: visible months
+          labelW * pr, 0, srcW, fullHeight * pr,   // dest: right of the label
+        );
+      }
+    }
+
+    const blob: Blob = await new Promise((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Snapshot failed"))), "image/png")
+    );
+    return blob;
   }
 
   async function saveSnapshot() {
