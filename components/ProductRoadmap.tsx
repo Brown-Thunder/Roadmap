@@ -42,27 +42,28 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 const QUARTER_MONTH_HORIZON = ["Now", "Next", "Later"] as const;
 
 // ── Timeline units ─────────────────────────────────────────────────────────
-// The timeline is measured in "half-month units" anchored at QUARTERS[0] month 0.
-// 1 month = 2 units; 1 quarter = 6 units. Resizing snaps to whole units (half-months).
-const UNITS_PER_MONTH = 2;
-const UNITS_PER_QUARTER = UNITS_PER_MONTH * 3; // 6
+// The timeline is measured in "week units" anchored at QUARTERS[0] month 0.
+// 1 month = 4 units (≈ weeks); 1 quarter = 12 units. Resizing/moving snaps to
+// whole units, giving 1-week increments.
+const UNITS_PER_MONTH = 4;
+const UNITS_PER_QUARTER = UNITS_PER_MONTH * 3; // 12
 
 function quarterToStartUnit(qIdx: number): number {
   return qIdx * UNITS_PER_QUARTER;
 }
 
-// Convert a timeline unit (half-month, anchored at QUARTERS[0] month 0) into a
-// readable label like "Early Jul 2026" or "Mid Aug 2026".
+// Convert a timeline unit (week, anchored at QUARTERS[0] month 0) into a readable
+// label like "Jul 2026 wk 1" or "Aug 2026 wk 3".
 function unitToDateLabel(unit: number): string {
   const monthsFromAnchor = Math.floor(unit / UNITS_PER_MONTH);
-  const isSecondHalf = unit % UNITS_PER_MONTH === 1;
+  const weekOfMonth = (unit % UNITS_PER_MONTH) + 1; // 1-based week within the month
   const qi = Math.floor(monthsFromAnchor / 3);
   const monthInQuarter = monthsFromAnchor % 3;
   const quarter = QUARTERS[Math.min(QUARTERS.length - 1, Math.max(0, qi))];
   const qNum = quarter.slice(0, 2);
   const year = parseInt(quarter.slice(3));
   const calMonth = QUARTER_MONTHS[qNum][monthInQuarter];
-  return `${isSecondHalf ? "Mid" : "Early"} ${MONTH_ABBR[calMonth]} ${year}`;
+  return `${MONTH_ABBR[calMonth]} ${year} wk ${weekOfMonth}`;
 }
 
 // A readable span label for a [start, end) unit range, e.g.
@@ -675,65 +676,82 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
             );
           };
 
+          // Build every workstream row (main bar + sub-bars) with a sort key, then
+          // order them by start date — soonest first, undated rows last.
+          const rows: { sortStart: number; node: React.ReactNode }[] = [];
+
+          if (hasPrimary) {
+            rows.push({
+              sortStart: initiative.startUnit!,
+              node: rowFor(
+                "__main__",
+                initiative.mainBarLabel || initiative.name,
+                { start: initiative.startUnit!, end: initiative.endUnit! },
+                "__main__",
+                initiative.mainBarLabel || "",
+                { description: initiative.mainBarDescription, northStarMetric: initiative.mainBarNorthStarMetric, successMetrics: initiative.mainBarSuccessMetrics },
+                async () => {
+                  const lbl = initiative.mainBarLabel || initiative.name;
+                  if (!confirm(`Delete workstream "${lbl}"?`)) return;
+                  // Clearing the initiative's own bar: drop its placed span. If there
+                  // are sub-bars, promote the earliest-starting one to the initiative's
+                  // span so the initiative keeps a bar on the roadmap.
+                  const placed = subs
+                    .filter((sb) => sb.startUnit != null && sb.endUnit != null)
+                    .sort((a, b) => a.startUnit! - b.startUnit! || a.endUnit! - b.endUnit!);
+                  if (placed.length > 0) {
+                    const promote = placed[0];
+                    const remaining = subs.filter((sb) => sb.id !== promote.id);
+                    const sq = Math.floor(promote.startUnit! / UNITS_PER_QUARTER);
+                    const eq = Math.floor((promote.endUnit! - 1) / UNITS_PER_QUARTER);
+                    await patchInitiative({
+                      mainBarLabel: promote.label || "",
+                      mainBarDescription: promote.description || "",
+                      mainBarNorthStarMetric: promote.northStarMetric || "",
+                      mainBarSuccessMetrics: promote.successMetrics || "",
+                      startUnit: promote.startUnit,
+                      endUnit: promote.endUnit,
+                      quarter: QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, sq))],
+                      endQuarter: eq > sq ? QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, eq))] : "",
+                      subBars: remaining,
+                    });
+                  } else {
+                    await patchInitiative({
+                      mainBarLabel: "", mainBarDescription: "", mainBarNorthStarMetric: "", mainBarSuccessMetrics: "",
+                      startUnit: null, endUnit: null, quarter: "", endQuarter: "",
+                    });
+                  }
+                },
+              ),
+            });
+          }
+
+          for (const sb of subs) {
+            rows.push({
+              sortStart: sb.startUnit != null ? sb.startUnit : Number.POSITIVE_INFINITY,
+              node: rowFor(
+                sb.id,
+                sb.label || "Unlabelled",
+                sb.startUnit != null && sb.endUnit != null ? { start: sb.startUnit, end: sb.endUnit } : null,
+                sb.id,
+                sb.label || "",
+                { description: sb.description, northStarMetric: sb.northStarMetric, successMetrics: sb.successMetrics },
+                async () => {
+                  if (!confirm(`Delete workstream "${sb.label || "Unlabelled"}"?`)) return;
+                  const next = subs.filter((x) => x.id !== sb.id);
+                  await patchInitiative({ subBars: next });
+                },
+              ),
+            });
+          }
+
+          rows.sort((a, b) => a.sortStart - b.sortStart);
+
           return (
             <div className="modal-section">
               <p className="rmi-section-label">Workstreams</p>
               <div className="rmi-workstreams-list">
-                {hasPrimary && rowFor(
-                  "__main__",
-                  initiative.mainBarLabel || initiative.name,
-                  { start: initiative.startUnit!, end: initiative.endUnit! },
-                  "__main__",
-                  initiative.mainBarLabel || "",
-                  { description: initiative.mainBarDescription, northStarMetric: initiative.mainBarNorthStarMetric, successMetrics: initiative.mainBarSuccessMetrics },
-                  async () => {
-                    const lbl = initiative.mainBarLabel || initiative.name;
-                    if (!confirm(`Delete workstream "${lbl}"?`)) return;
-                    // Clearing the initiative's own bar: drop its placed span. If there
-                    // are sub-bars, promote the earliest-starting one to the initiative's
-                    // span so the initiative keeps a bar on the roadmap.
-                    const placed = subs
-                      .filter((sb) => sb.startUnit != null && sb.endUnit != null)
-                      .sort((a, b) => a.startUnit! - b.startUnit! || a.endUnit! - b.endUnit!);
-                    if (placed.length > 0) {
-                      const promote = placed[0];
-                      const remaining = subs.filter((sb) => sb.id !== promote.id);
-                      const sq = Math.floor(promote.startUnit! / UNITS_PER_QUARTER);
-                      const eq = Math.floor((promote.endUnit! - 1) / UNITS_PER_QUARTER);
-                      await patchInitiative({
-                        mainBarLabel: promote.label || "",
-                        mainBarDescription: promote.description || "",
-                        mainBarNorthStarMetric: promote.northStarMetric || "",
-                        mainBarSuccessMetrics: promote.successMetrics || "",
-                        startUnit: promote.startUnit,
-                        endUnit: promote.endUnit,
-                        quarter: QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, sq))],
-                        endQuarter: eq > sq ? QUARTERS[Math.max(0, Math.min(QUARTERS.length - 1, eq))] : "",
-                        subBars: remaining,
-                      });
-                    } else {
-                      await patchInitiative({
-                        mainBarLabel: "", mainBarDescription: "", mainBarNorthStarMetric: "", mainBarSuccessMetrics: "",
-                        startUnit: null, endUnit: null, quarter: "", endQuarter: "",
-                      });
-                    }
-                  },
-                )}
-                {subs.map((sb) =>
-                  rowFor(
-                    sb.id,
-                    sb.label || "Unlabelled",
-                    sb.startUnit != null && sb.endUnit != null ? { start: sb.startUnit, end: sb.endUnit } : null,
-                    sb.id,
-                    sb.label || "",
-                    { description: sb.description, northStarMetric: sb.northStarMetric, successMetrics: sb.successMetrics },
-                    async () => {
-                      if (!confirm(`Delete workstream "${sb.label || "Unlabelled"}"?`)) return;
-                      const next = subs.filter((x) => x.id !== sb.id);
-                      await patchInitiative({ subBars: next });
-                    },
-                  )
-                )}
+                {rows.map((r) => r.node)}
               </div>
             </div>
           );
