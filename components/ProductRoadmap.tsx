@@ -174,17 +174,14 @@ const SUBGOAL_TO_GOAL: Record<StrategyGoal, string> = {
   "3.1": "3", "3.2": "3", "3.3": "3",
 };
 
-// Preferred display order for swimlane groups (by summary). Anything not listed
-// falls to the bottom, keeping its first-seen order.
-const SUMMARY_ORDER = [
-  "First booking conversion",
-  "Increase host engagement",
-  "Organic page rank",
-  "Scaling supply",
-];
-function summaryRank(summary: string): number {
-  const idx = SUMMARY_ORDER.indexOf(summary);
-  return idx === -1 ? SUMMARY_ORDER.length : idx;
+// Sortable numeric key for a strategy sub-goal, e.g. "1.2" -> 102, "3.1" -> 301.
+// Groups/themes are ordered by the sub-goal they serve (1.1 first, then 1.2, …).
+// Missing/invalid goals sort to the very bottom.
+function subGoalSortKey(sg: StrategyGoal | "" | undefined): number {
+  if (!sg) return Number.POSITIVE_INFINITY;
+  const [major, minor] = sg.split(".").map((n) => parseInt(n, 10));
+  if (Number.isNaN(major) || Number.isNaN(minor)) return Number.POSITIVE_INFINITY;
+  return major * 100 + minor;
 }
 
 const STATUS_STYLES: Record<RoadmapStatus, { bg: string; fg: string; border: string; dot: string }> = {
@@ -1958,11 +1955,18 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     if (!bySummary[s]) { summaries.push(s); bySummary[s] = []; }
     bySummary[s].push(item);
   }
-  // Order swimlanes by the preferred SUMMARY_ORDER, then alphabetically for the rest.
+  // Order swimlanes by the strategy sub-goal they serve (1.1, then 1.2, …). A
+  // group's key is the earliest (lowest) sub-goal across its initiatives; groups
+  // with no goal fall to the bottom. Ties break alphabetically by name.
+  const groupGoalKey = (summary: string): number =>
+    Math.min(
+      ...bySummary[summary].map((i) => subGoalSortKey(i.strategyGoal)),
+      Number.POSITIVE_INFINITY,
+    );
   summaries.sort((a, b) => {
-    const ra = summaryRank(a);
-    const rb = summaryRank(b);
-    if (ra !== rb) return ra - rb;
+    const ka = groupGoalKey(a);
+    const kb = groupGoalKey(b);
+    if (ka !== kb) return ka - kb;
     return a.localeCompare(b);
   });
 
