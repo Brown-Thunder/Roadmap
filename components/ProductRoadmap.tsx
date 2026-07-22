@@ -1188,10 +1188,9 @@ function GanttRow({
           <span className="gantt-row-name" onClick={(e) => { e.stopPropagation(); onOpen(null); }} role="button" title="View details">
             {initiative.name}
           </span>
-          {(initiative.team || initiative.owner) && (
+          {initiative.owner && (
             <div className="gantt-label-pills">
-              {initiative.team && <span className={`gantt-team-chip team-${initiative.team.toLowerCase()}`}>{initiative.team}</span>}
-              {initiative.owner && <span className="gantt-owner-chip">{initiative.owner}</span>}
+              <span className="gantt-owner-chip">{initiative.owner}</span>
             </div>
           )}
         </div>
@@ -2237,6 +2236,8 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
               const primaryGoal = groupItems.find((i) => i.strategyGoal)?.strategyGoal as StrategyGoal | undefined;
               const gn = primaryGoal ? SUBGOAL_TO_GOAL[primaryGoal] : undefined;
               const meta = gn ? GOAL_META[gn] : null;
+              // Distinct teams represented in this group, shown as chips on the header.
+              const groupTeams = Array.from(new Set(groupItems.map((i) => i.team).filter(Boolean)));
 
               return (
                 <div key={summary} className="gantt-group">
@@ -2250,6 +2251,9 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                   >
                     <div className="gantt-label-cell">
                       <span className="gantt-group-name">{summary}</span>
+                      {groupTeams.map((t) => (
+                        <span key={t} className={`gantt-team-chip team-${t.toLowerCase()}`}>{t}</span>
+                      ))}
                       {gn && meta && (
                         <span
                           className="gantt-goal-badge"

@@ -3105,7 +3105,7 @@ a.link:hover { text-decoration: underline; }
 
 /* ── Group header row ── */
 .gantt-group-header {
-  height: 38px;
+  height: 42px;
   border-bottom: 1px solid var(--line-strong);
   border-top: 2px solid var(--line-strong);
 }
@@ -3123,6 +3123,7 @@ a.link:hover { text-decoration: underline; }
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: -0.01em;
+  min-width: 0; /* shrink first so the team/goal chips stay visible */
 }
 .gantt-goal-badge {
   font-size: 10px;
@@ -3135,7 +3136,7 @@ a.link:hover { text-decoration: underline; }
 
 /* ── Initiative row ── */
 .gantt-row {
-  height: 44px;
+  height: 56px;
   border-bottom: 1px solid var(--line);
   transition: background 0.1s;
   background: var(--panel);
