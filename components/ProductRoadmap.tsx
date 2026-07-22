@@ -1184,11 +1184,17 @@ function GanttRow({
       >
         {!readOnly && <span className="gantt-drag-grip" title="Drag to reorder" aria-hidden>⠿</span>}
         <span className="gantt-dot" style={{ background: ss.dot }} title={initiative.status} />
-        <span className="gantt-row-name" onClick={(e) => { e.stopPropagation(); onOpen(null); }} role="button" title="View details">
-          {initiative.name}
-        </span>
-        {initiative.team && <span className={`gantt-team-chip team-${initiative.team.toLowerCase()}`}>{initiative.team}</span>}
-        {initiative.owner && <span className="gantt-owner-chip">{initiative.owner}</span>}
+        <div className="gantt-label-text">
+          <span className="gantt-row-name" onClick={(e) => { e.stopPropagation(); onOpen(null); }} role="button" title="View details">
+            {initiative.name}
+          </span>
+          {(initiative.team || initiative.owner) && (
+            <div className="gantt-label-pills">
+              {initiative.team && <span className={`gantt-team-chip team-${initiative.team.toLowerCase()}`}>{initiative.team}</span>}
+              {initiative.owner && <span className="gantt-owner-chip">{initiative.owner}</span>}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Month track */}
