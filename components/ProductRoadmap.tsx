@@ -1072,11 +1072,6 @@ function SubBarNameModal({
 
 // ── Gantt row ─────────────────────────────────────────────────────────────────
 
-// Returns true if two [start,end) spans overlap.
-function spansOverlap(a: { start: number; end: number }, b: { start: number; end: number }) {
-  return a.start < b.end && b.start < a.end;
-}
-
 function GanttRow({
   initiative,
   months,
@@ -1146,43 +1141,17 @@ function GanttRow({
     return sb;
   });
 
-  // Detect overlaps among all placed bars to decide layout.
-  // Build list of all placed spans (primary + subbars with positions).
-  const allSpans: { start: number; end: number }[] = [];
-  if (primarySpan) allSpans.push(primarySpan);
-  for (const sb of resolvedSubBars) {
-    if (sb.startUnit != null && sb.endUnit != null) allSpans.push({ start: sb.startUnit, end: sb.endUnit });
-  }
-  // Any two bars overlap → use stacked layout for the whole row.
-  let hasOverlap = false;
-  for (let i = 0; i < allSpans.length && !hasOverlap; i++) {
-    for (let j = i + 1; j < allSpans.length && !hasOverlap; j++) {
-      if (spansOverlap(allSpans[i], allSpans[j])) hasOverlap = true;
-    }
-  }
-
-  // Stacked layout (and the taller row) is used ONLY when bars actually overlap,
-  // or while drawing a ghost over an existing bar. Non-overlapping sub-bars share
-  // the same full-height track as the primary bar, keeping the original bar height.
-  const showTall = hasOverlap || (!!drawGhost && !!primarySpan && (() => {
-    const g = drawGhost!;
-    return allSpans.some((s) => spansOverlap(s, g));
-  })());
-
-  const bar   = primarySpan ? clipSpan(primarySpan) : null;
-  const ghost = drawGhost   ? clipSpan(drawGhost)   : null;
-
   // Bar height / vertical position helpers.
-  // No overlap: use CSS defaults (top:7px bottom:7px via .gantt-bar) — one row.
-  // Overlap: give each lane a FULL-height slice equal to a normal row, and grow
-  // the whole row so every overlapping workstream keeps the same height as the
-  // primary bar (2 overlapping → double height, 3 → triple, …).
+  // One lane (no overlaps): use CSS defaults (top:7px bottom:7px via .gantt-bar).
+  // Multiple lanes: each lane is a FULL-height slice equal to a normal row, and
+  // the row grows by one row-height per lane. Bars only take a new lane when they
+  // actually overlap another bar; non-overlapping bars share a lane.
   const ROW_H = 56;       // matches .gantt-row height in CSS
   const BAR_INSET = 7;    // matches .gantt-bar top/bottom in CSS
   const laneTopForIdx = (idx: number) => idx * ROW_H + BAR_INSET;
 
-  // When overlapping, order every placed lane (primary + sub-bars) by start unit
-  // (then end unit) so the workstream that starts first sits at the top. The key
+  // Greedy interval packing: place every bar (primary + sub-bars, ordered by start
+  // date) into the first lane whose previous bar ends at/before this one's start.
   // "__primary__" identifies the initiative's own bar.
   const PRIMARY_KEY = "__primary__";
   const placedLanes: { key: string; start: number; end: number }[] = [];
@@ -1191,12 +1160,35 @@ function GanttRow({
     if (sb.startUnit != null && sb.endUnit != null) placedLanes.push({ key: sb.id, start: sb.startUnit, end: sb.endUnit });
   }
   placedLanes.sort((a, b) => a.start - b.start || a.end - b.end);
-  const laneIdxByKey = new Map<string, number>();
-  placedLanes.forEach((lane, idx) => laneIdxByKey.set(lane.key, idx));
 
-  // When stacked, the row is one full-height slice per lane (+ a draw ghost lane).
-  const stackedLaneCount = placedLanes.length + (showTall && ghost ? 1 : 0);
-  const stackedRowHeight = Math.max(1, stackedLaneCount) * ROW_H;
+  const laneEnds: number[] = []; // end unit of the last bar placed in each lane
+  const laneIdxByKey = new Map<string, number>();
+  for (const lane of placedLanes) {
+    let assigned = -1;
+    for (let i = 0; i < laneEnds.length; i++) {
+      if (lane.start >= laneEnds[i]) { assigned = i; break; } // fits after prev bar
+    }
+    if (assigned === -1) { assigned = laneEnds.length; laneEnds.push(lane.end); }
+    else laneEnds[assigned] = lane.end;
+    laneIdxByKey.set(lane.key, assigned);
+  }
+
+  // A draw ghost occupies whichever lane it doesn't overlap (or a fresh lane).
+  let ghostLane = 0;
+  if (drawGhost) {
+    ghostLane = laneEnds.length; // default: new lane
+    for (let i = 0; i < laneEnds.length; i++) {
+      if (drawGhost.start >= laneEnds[i]) { ghostLane = i; break; }
+    }
+  }
+
+  const usedLaneCount = Math.max(laneEnds.length, drawGhost ? ghostLane + 1 : 0);
+  // Only grow the row / switch to lane positioning when more than one lane is used.
+  const showTall = usedLaneCount > 1;
+  const stackedRowHeight = usedLaneCount * ROW_H;
+
+  const bar   = primarySpan ? clipSpan(primarySpan) : null;
+  const ghost = drawGhost   ? clipSpan(drawGhost)   : null;
 
   function barStyle(isStacked: boolean, stackIdx: number, clipped: { clipLeft: boolean; clipRight: boolean }) {
     const base = {
@@ -1284,8 +1276,8 @@ function GanttRow({
           if (sb.startUnit == null || sb.endUnit == null) return null;
           const sbBar = clipSpan({ start: sb.startUnit, end: sb.endUnit });
           if (!sbBar) return null;
-          // Stacked layout: lane index is determined by start-date order.
-          const stackIdx = showTall ? (laneIdxByKey.get(sb.id) ?? 0) : 0;
+          // Lane assigned by greedy interval packing (overlapping bars only).
+          const stackIdx = laneIdxByKey.get(sb.id) ?? 0;
           const style = { left: `${sbBar.leftPct}%`, width: `${sbBar.widthPct}%`, ...barStyle(showTall, stackIdx, sbBar) };
           return (
             <div key={sb.id} className="gantt-bar gantt-sub-bar" style={style}
@@ -1308,14 +1300,14 @@ function GanttRow({
           );
         })}
 
-        {/* Draw ghost — shown during click-drag to create a new bar.
-            When the row is stacked (overlap), the ghost sits in the next stack
-            slot; otherwise it spans full height like a normal bar. */}
+        {/* Draw ghost — shown during click-drag to create a new bar. It sits in the
+            lane it doesn't overlap; only if that pushes the row past one lane do we
+            switch to explicit lane positioning. */}
         {ghost && (
           <div className="gantt-bar gantt-draw-ghost" style={{
             left: `${ghost.leftPct}%`, width: `${ghost.widthPct}%`,
             ...(showTall
-              ? { top: laneTopForIdx(placedLanes.length), bottom: "auto", height: ROW_H - BAR_INSET * 2 }
+              ? { top: laneTopForIdx(ghostLane), bottom: "auto", height: ROW_H - BAR_INSET * 2 }
               : {}),
             pointerEvents: "none",
           }} />
