@@ -857,7 +857,12 @@ function WorkstreamModal({
   const [form, setForm] = useState<RoadmapSubBar>({ ...subBar });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState("");
+  const [commentAuthor, setCommentAuthor] = useState("");
+  const [addingComment, setAddingComment] = useState(false);
   const gc = goalColor(initiative);
+
+  const comments = subBar.comments || [];
 
   const span = form.startUnit != null && form.endUnit != null
     ? { start: form.startUnit, end: form.endUnit } : null;
@@ -902,6 +907,41 @@ function WorkstreamModal({
       setMode("view");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addComment() {
+    if (!commentText.trim() || !commentAuthor.trim()) return;
+    const comment: RoadmapComment = {
+      id: `${Date.now()}`,
+      author: commentAuthor.trim(),
+      text: commentText.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    const nextComments = [...comments, comment];
+    // Main bar comments live on the initiative; sub-bar comments live in subBars.
+    const payload: Partial<RoadmapInitiative> = isMain
+      ? { mainBarComments: nextComments }
+      : {
+          subBars: (initiative.subBars || []).map((sb) =>
+            sb.id === subBar.id ? { ...sb, comments: nextComments } : sb
+          ),
+        };
+    setBusy(true); setError(null);
+    try {
+      const res = await fetch(`/api/roadmap-initiatives/${initiative.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Failed");
+      onSaved(data.initiative);
+      setCommentText(""); setCommentAuthor(""); setAddingComment(false);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Comment failed");
     } finally {
       setBusy(false);
     }
@@ -960,6 +1000,46 @@ function WorkstreamModal({
                 <div className="rmi-ws-empty">No details yet.{!readOnly && " Click Edit to add some."}</div>
               </div>
             )}
+
+            {/* Comments */}
+            <div className="modal-section">
+              <div className="comments-header">
+                <span>Comments ({comments.length})</span>
+                {!addingComment && !readOnly && (
+                  <button className="btn-link" onClick={() => setAddingComment(true)}>+ Add comment</button>
+                )}
+              </div>
+              {comments.length === 0 && !addingComment && (
+                <div className="comments-empty">No comments yet.</div>
+              )}
+              {comments.map((c) => (
+                <div key={c.id} className="comment-item">
+                  <div className="comment-meta">
+                    <strong>{c.author}</strong>
+                    <span className="comment-date">
+                      {new Date(c.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                    </span>
+                  </div>
+                  <div className="comment-text">{c.text}</div>
+                </div>
+              ))}
+              {addingComment && (
+                <div className="comment-compose">
+                  <input className="comment-author-input" placeholder="Your name"
+                    value={commentAuthor} onChange={(e) => setCommentAuthor(e.target.value)} />
+                  <textarea className="comment-textarea" placeholder="Write a comment…"
+                    value={commentText} onChange={(e) => setCommentText(e.target.value)} autoFocus />
+                  <div className="comment-actions">
+                    <button className="btn btn-soft" style={{ fontSize: 13, padding: "6px 12px" }}
+                      onClick={() => { setAddingComment(false); setCommentText(""); }}>Cancel</button>
+                    <button className="btn primary" style={{ fontSize: 13, padding: "6px 12px" }}
+                      onClick={addComment} disabled={busy}>Post comment</button>
+                  </div>
+                </div>
+              )}
+              {error && <div className="field-error" style={{ marginTop: 8 }}>{error}</div>}
+            </div>
+
             <div className="modal-actions">
               <div style={{ flex: 1 }} />
               <button className="btn btn-soft" onClick={onClose}>Close</button>
@@ -2019,7 +2099,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     id: "__new__", summary: "", name: "", strategyGoal: "", status: "Planned",
     description: "", owner: "", team: "", quarter: "", endQuarter: "", startUnit: null, endUnit: null,
     mainBarLabel: "", mainBarDescription: "", mainBarNorthStarMetric: "", mainBarSuccessMetrics: "",
-    subBars: [], northStarMetric: "", successMetrics: "",
+    mainBarComments: [], subBars: [], northStarMetric: "", successMetrics: "",
     notes: "", comments: [], order: 999,
   };
   const modalInitiative = modal === "new" ? newInitiative : modal;
@@ -2388,6 +2468,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
               northStarMetric: ws.mainBarNorthStarMetric,
               successMetrics: ws.mainBarSuccessMetrics,
               strategyGoal: ws.strategyGoal,
+              comments: ws.mainBarComments,
             }
           : ws.subBars?.find((s) => s.id === workstreamModal.subBarId);
         if (!sb) return null;

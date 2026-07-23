@@ -9,13 +9,16 @@
 //  Team            (Single select)      — Hosts | Customers
 //  Quarter         (Single select)      — Q3 2026 … Q4 2027
 //  End Quarter     (Single select)      — Q3 2026 … Q4 2027
-//  Start Unit      (Number)             — fine-grained half-month offset
-//  End Unit        (Number)             — fine-grained half-month offset (exclusive)
+//  Start Unit      (Number)             — fine-grained week offset from anchor
+//  End Unit        (Number)             — fine-grained week offset (exclusive)
 //  Main Bar Label  (Single line text)   — primary bar / workstream label (blank = use Name)
 //  Main Bar Description       (Long text)        — the main workstream's own description
 //  Main Bar North Star Metric (Single line text) — the main workstream's own north star
 //  Main Bar Success Metrics   (Long text)        — the main workstream's own success metrics
-//  Sub Bars        (Long text)          — JSON array of RoadmapSubBar
+//  Main Bar Comments          (Long text)        — JSON array of RoadmapComment (main workstream)
+//  Sub Bars        (Long text)          — JSON array of RoadmapSubBar (incl. each
+//                                          workstream's description / metrics /
+//                                          strategyGoal / comments)
 //  North Star Metric (Single line text) — headline metric this initiative moves
 //  Success Metrics (Long text)          — how success will be tracked
 //  Description     (Long text)
@@ -79,6 +82,7 @@ export interface RoadmapSubBar {
   // Strategy goal this workstream serves. Undefined = inherit the parent
   // initiative's goal.
   strategyGoal?: StrategyGoal | "";
+  comments?: RoadmapComment[]; // workstream-specific comments
 }
 
 export interface RoadmapInitiative {
@@ -103,6 +107,7 @@ export interface RoadmapInitiative {
   mainBarDescription: string;
   mainBarNorthStarMetric: string;
   mainBarSuccessMetrics: string;
+  mainBarComments: RoadmapComment[]; // the main workstream's own comments
   // Additional bars on the same row (e.g. separate App / Web timelines or V2, V3).
   subBars: RoadmapSubBar[];
   northStarMetric: string;   // single headline metric this initiative moves
@@ -148,6 +153,10 @@ function toRoadmapInitiative(rec: any): RoadmapInitiative {
     mainBarDescription: f["Main Bar Description"] || "",
     mainBarNorthStarMetric: f["Main Bar North Star Metric"] || "",
     mainBarSuccessMetrics: f["Main Bar Success Metrics"] || "",
+    mainBarComments: (() => {
+      try { return f["Main Bar Comments"] ? JSON.parse(f["Main Bar Comments"]) : []; }
+      catch { return []; }
+    })(),
     subBars: (() => {
       try { return f["Sub Bars"] ? JSON.parse(f["Sub Bars"]) : []; }
       catch { return []; }
@@ -180,6 +189,7 @@ function toFields(input: Partial<RoadmapInitiative>): Record<string, any> {
   if (input.mainBarDescription !== undefined) f["Main Bar Description"] = input.mainBarDescription;
   if (input.mainBarNorthStarMetric !== undefined) f["Main Bar North Star Metric"] = input.mainBarNorthStarMetric;
   if (input.mainBarSuccessMetrics !== undefined) f["Main Bar Success Metrics"] = input.mainBarSuccessMetrics;
+  if (input.mainBarComments !== undefined) f["Main Bar Comments"] = JSON.stringify(input.mainBarComments);
   if (input.subBars !== undefined) f["Sub Bars"] = JSON.stringify(input.subBars);
   if (input.northStarMetric !== undefined) f["North Star Metric"] = input.northStarMetric;
   if (input.successMetrics !== undefined) f["Success Metrics"] = input.successMetrics;
