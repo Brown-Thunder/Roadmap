@@ -593,11 +593,11 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
             span: { start: number; end: number } | null,
             renameKey: string | null,           // null = not renamable
             renameSeed: string,
-            details: { description?: string; northStarMetric?: string; successMetrics?: string },
+            details: { goalLabel?: string; description?: string; northStarMetric?: string; successMetrics?: string },
             onDelete?: () => void,
           ) => {
             const expanded = expandedWsId === key;
-            const hasDetails = !!(span || details.description || details.northStarMetric || details.successMetrics);
+            const hasDetails = !!(span || details.goalLabel || details.description || details.northStarMetric || details.successMetrics);
             return (
               <div key={key} className={`rmi-workstream${expanded ? " expanded" : ""}`}>
                 <div className="rmi-workstream-row">
@@ -648,6 +648,12 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                         <span className="rmi-ws-field-value">{unitRangeLabel(span.start, span.end)}</span>
                       </div>
                     )}
+                    {details.goalLabel && (
+                      <div className="rmi-ws-field">
+                        <span className="rmi-ws-field-label">Strategy goal</span>
+                        <span className="rmi-ws-field-value">{details.goalLabel}</span>
+                      </div>
+                    )}
                     {details.description && (
                       <div className="rmi-ws-field">
                         <span className="rmi-ws-field-label">Description</span>
@@ -686,7 +692,12 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                 { start: initiative.startUnit!, end: initiative.endUnit! },
                 "__main__",
                 initiative.mainBarLabel || "",
-                { description: initiative.mainBarDescription, northStarMetric: initiative.mainBarNorthStarMetric, successMetrics: initiative.mainBarSuccessMetrics },
+                {
+                  goalLabel: initiative.strategyGoal ? STRATEGY_GOAL_LABELS[initiative.strategyGoal as StrategyGoal] : undefined,
+                  description: initiative.mainBarDescription,
+                  northStarMetric: initiative.mainBarNorthStarMetric,
+                  successMetrics: initiative.mainBarSuccessMetrics,
+                },
                 async () => {
                   const lbl = initiative.mainBarLabel || initiative.name;
                   if (!confirm(`Delete workstream "${lbl}"?`)) return;
@@ -732,7 +743,15 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                 sb.startUnit != null && sb.endUnit != null ? { start: sb.startUnit, end: sb.endUnit } : null,
                 sb.id,
                 sb.label || "",
-                { description: sb.description, northStarMetric: sb.northStarMetric, successMetrics: sb.successMetrics },
+                (() => {
+                  const eff = (sb.strategyGoal || initiative.strategyGoal || "") as StrategyGoal | "";
+                  return {
+                    goalLabel: eff ? STRATEGY_GOAL_LABELS[eff] : undefined,
+                    description: sb.description,
+                    northStarMetric: sb.northStarMetric,
+                    successMetrics: sb.successMetrics,
+                  };
+                })(),
                 async () => {
                   if (!confirm(`Delete workstream "${sb.label || "Unlabelled"}"?`)) return;
                   const next = subs.filter((x) => x.id !== sb.id);
@@ -843,6 +862,12 @@ function WorkstreamModal({
   const span = form.startUnit != null && form.endUnit != null
     ? { start: form.startUnit, end: form.endUnit } : null;
 
+  // The goal this workstream serves: its own if set, otherwise the parent's.
+  const effectiveGoal: StrategyGoal | "" =
+    (form.strategyGoal || (isMain ? "" : (initiative.strategyGoal || ""))) as StrategyGoal | "";
+  const effectiveGoalNum = goalNum(effectiveGoal);
+  const effectiveGoalMeta = effectiveGoalNum ? GOAL_META[effectiveGoalNum] : null;
+
   function set(key: keyof RoadmapSubBar, value: unknown) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -852,12 +877,14 @@ function WorkstreamModal({
     try {
       // The initiative's own bar saves into its dedicated main-bar fields (kept
       // independent of the initiative-level description/metrics); sub-bars into subBars.
+      // The main bar's strategy goal IS the initiative's own strategyGoal.
       const payload: Partial<RoadmapInitiative> = isMain
         ? {
             mainBarLabel: form.label.trim(),
             mainBarDescription: form.description || "",
             mainBarNorthStarMetric: form.northStarMetric || "",
             mainBarSuccessMetrics: form.successMetrics || "",
+            strategyGoal: (form.strategyGoal ?? "") as StrategyGoal | "",
           }
         : {
             subBars: (initiative.subBars || []).map((sb) =>
@@ -899,6 +926,11 @@ function WorkstreamModal({
           <>
             <div className="modal-badges">
               {span && <span className="meta-badge tf">{unitRangeLabel(span.start, span.end)}</span>}
+              {effectiveGoal && effectiveGoalMeta && (
+                <span className="meta-badge" style={{ background: effectiveGoalMeta.light, color: effectiveGoalMeta.color, borderColor: effectiveGoalMeta.light }}>
+                  {STRATEGY_GOAL_LABELS[effectiveGoal]}
+                </span>
+              )}
             </div>
             {!readOnly && (
               <div className="modal-action-bar">
@@ -942,6 +974,20 @@ function WorkstreamModal({
                   <label className="field-label">Workstream name</label>
                   <input className="input" value={form.label}
                     onChange={(e) => set("label", e.target.value)} placeholder="e.g. Web, App, V2" />
+                </div>
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label className="field-label">Strategy goal</label>
+                  <select className="select" value={form.strategyGoal ?? ""}
+                    onChange={(e) => set("strategyGoal", e.target.value as StrategyGoal | "")}>
+                    <option value="">
+                      {isMain
+                        ? "— None —"
+                        : `— Use initiative's goal${initiative.strategyGoal ? ` (${initiative.strategyGoal})` : ""} —`}
+                    </option>
+                    {(Object.keys(STRATEGY_GOAL_LABELS) as StrategyGoal[]).map((g) => (
+                      <option key={g} value={g}>{STRATEGY_GOAL_LABELS[g]}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="field" style={{ marginTop: 10 }}>
                   <label className="field-label">Description</label>
@@ -1127,12 +1173,13 @@ function GanttRow({
   const ghost = drawGhost   ? clipSpan(drawGhost)   : null;
 
   // Bar height / vertical position helpers.
-  // Full-height (no overlap): use CSS defaults (top:7px bottom:7px via .gantt-bar).
-  // Stacked (overlap): lanes ordered by start date — earliest-starting on top.
-  const STACK_H = 16;
-  const STACK_GAP = 4;
-  const STACK_TOP = 5;
-  const stackTopForIdx = (idx: number) => STACK_TOP + idx * (STACK_H + STACK_GAP);
+  // No overlap: use CSS defaults (top:7px bottom:7px via .gantt-bar) — one row.
+  // Overlap: give each lane a FULL-height slice equal to a normal row, and grow
+  // the whole row so every overlapping workstream keeps the same height as the
+  // primary bar (2 overlapping → double height, 3 → triple, …).
+  const ROW_H = 56;       // matches .gantt-row height in CSS
+  const BAR_INSET = 7;    // matches .gantt-bar top/bottom in CSS
+  const laneTopForIdx = (idx: number) => idx * ROW_H + BAR_INSET;
 
   // When overlapping, order every placed lane (primary + sub-bars) by start unit
   // (then end unit) so the workstream that starts first sits at the top. The key
@@ -1147,9 +1194,9 @@ function GanttRow({
   const laneIdxByKey = new Map<string, number>();
   placedLanes.forEach((lane, idx) => laneIdxByKey.set(lane.key, idx));
 
-  // When stacked, the row must be tall enough for every lane (+ a draw ghost lane).
+  // When stacked, the row is one full-height slice per lane (+ a draw ghost lane).
   const stackedLaneCount = placedLanes.length + (showTall && ghost ? 1 : 0);
-  const stackedRowHeight = STACK_TOP * 2 + stackedLaneCount * STACK_H + Math.max(0, stackedLaneCount - 1) * STACK_GAP;
+  const stackedRowHeight = Math.max(1, stackedLaneCount) * ROW_H;
 
   function barStyle(isStacked: boolean, stackIdx: number, clipped: { clipLeft: boolean; clipRight: boolean }) {
     const base = {
@@ -1163,12 +1210,13 @@ function GanttRow({
       borderTopRightRadius:    clipped.clipRight ? 0 : 6,
       borderBottomRightRadius: clipped.clipRight ? 0 : 6,
     };
-    if (!isStacked) return base; // CSS handles top/bottom
+    if (!isStacked) return base; // CSS handles top/bottom (full height, single row)
+    // Each lane is a full-height slice: same visible bar height as a normal row.
     return {
       ...base,
-      top: stackTopForIdx(stackIdx),
+      top: laneTopForIdx(stackIdx),
       bottom: "auto" as const,
-      height: STACK_H,
+      height: ROW_H - BAR_INSET * 2,
     };
   }
 
@@ -1251,7 +1299,7 @@ function GanttRow({
                   onPointerDown={(e) => { e.stopPropagation(); onBarMoveStart(e, initiative.id, sb.id); }}
                   title="Drag to move" />
               )}
-              <span className="gantt-bar-label gantt-sub-bar-label" style={{ color: gc }}>{sb.label}</span>
+              <span className="gantt-bar-label" style={{ color: gc }}>{sb.label}</span>
               {!readOnly && !sbBar.clipRight && (
                 <div className="gantt-resize-handle gantt-resize-right"
                   onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "right", sb.id); }} />
@@ -1267,7 +1315,7 @@ function GanttRow({
           <div className="gantt-bar gantt-draw-ghost" style={{
             left: `${ghost.leftPct}%`, width: `${ghost.widthPct}%`,
             ...(showTall
-              ? { top: stackTopForIdx(placedLanes.length), bottom: "auto", height: STACK_H }
+              ? { top: laneTopForIdx(placedLanes.length), bottom: "auto", height: ROW_H - BAR_INSET * 2 }
               : {}),
             pointerEvents: "none",
           }} />
@@ -2347,6 +2395,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
               description: ws.mainBarDescription,
               northStarMetric: ws.mainBarNorthStarMetric,
               successMetrics: ws.mainBarSuccessMetrics,
+              strategyGoal: ws.strategyGoal,
             }
           : ws.subBars?.find((s) => s.id === workstreamModal.subBarId);
         if (!sb) return null;

@@ -3471,10 +3471,11 @@ a.link:hover { text-decoration: underline; }
   line-height: 1;
 }
 
-/* ── Sub-bar rows — taller to fit two stacked bars ── */
-.gantt-row-has-subbars { height: auto; min-height: 52px; }
-.gantt-sub-bar { cursor: pointer; }
-.gantt-sub-bar-label { font-size: 10.5px; }
+/* ── Overlapping workstreams stack into full-height lanes; the row grows to fit
+      (height set inline per lane count). Sub-bars are styled identically to the
+      primary bar. ── */
+.gantt-row-has-subbars { height: auto; }
+.gantt-bar { cursor: pointer; }
 
 /* ── Draw gesture ── */
 .gantt-track-drawable { cursor: crosshair; }

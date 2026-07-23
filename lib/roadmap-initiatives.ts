@@ -76,6 +76,9 @@ export interface RoadmapSubBar {
   description?: string;       // workstream-specific description
   northStarMetric?: string;   // workstream-specific north star metric
   successMetrics?: string;    // how this workstream's success is tracked
+  // Strategy goal this workstream serves. Undefined = inherit the parent
+  // initiative's goal.
+  strategyGoal?: StrategyGoal | "";
 }
 
 export interface RoadmapInitiative {
