@@ -593,11 +593,12 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
             span: { start: number; end: number } | null,
             renameKey: string | null,           // null = not renamable
             renameSeed: string,
-            details: { goalLabel?: string; description?: string; northStarMetric?: string; successMetrics?: string },
+            details: { status?: RoadmapStatus; goalLabel?: string; description?: string; northStarMetric?: string; successMetrics?: string },
             onDelete?: () => void,
           ) => {
             const expanded = expandedWsId === key;
-            const hasDetails = !!(span || details.goalLabel || details.description || details.northStarMetric || details.successMetrics);
+            const hasDetails = !!(span || details.status || details.goalLabel || details.description || details.northStarMetric || details.successMetrics);
+            const statusDot = details.status ? (STATUS_STYLES[details.status] ?? STATUS_STYLES["Planned"]).dot : gc2;
             return (
               <div key={key} className={`rmi-workstream${expanded ? " expanded" : ""}`}>
                 <div className="rmi-workstream-row">
@@ -608,7 +609,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                     onClick={() => setExpandedWsId(expanded ? null : key)}
                   >
                     <span className={`rmi-workstream-caret${expanded ? " open" : ""}`}>▸</span>
-                    <span className="rmi-workstream-dot" style={{ background: gc2 }} />
+                    <span className="rmi-workstream-dot" style={{ background: statusDot }} title={details.status} />
                     {renameKey && renamingId === renameKey ? (
                       <input
                         className="input rmi-workstream-rename-input"
@@ -642,6 +643,12 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                 </div>
                 {expanded && (
                   <div className="rmi-workstream-detail">
+                    {details.status && (
+                      <div className="rmi-ws-field">
+                        <span className="rmi-ws-field-label">Status</span>
+                        <span className="rmi-ws-field-value">{details.status}</span>
+                      </div>
+                    )}
                     {span && (
                       <div className="rmi-ws-field">
                         <span className="rmi-ws-field-label">Dates</span>
@@ -693,6 +700,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                 "__main__",
                 initiative.mainBarLabel || "",
                 {
+                  status: initiative.status,
                   goalLabel: initiative.strategyGoal ? STRATEGY_GOAL_LABELS[initiative.strategyGoal as StrategyGoal] : undefined,
                   description: initiative.mainBarDescription,
                   northStarMetric: initiative.mainBarNorthStarMetric,
@@ -746,6 +754,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                 (() => {
                   const eff = (sb.strategyGoal || initiative.strategyGoal || "") as StrategyGoal | "";
                   return {
+                    status: (sb.status || initiative.status) as RoadmapStatus,
                     goalLabel: eff ? STRATEGY_GOAL_LABELS[eff] : undefined,
                     description: sb.description,
                     northStarMetric: sb.northStarMetric,
@@ -873,6 +882,12 @@ function WorkstreamModal({
   const effectiveGoalNum = goalNum(effectiveGoal);
   const effectiveGoalMeta = effectiveGoalNum ? GOAL_META[effectiveGoalNum] : null;
 
+  // The status this workstream shows: its own if set, otherwise the parent's.
+  // The main bar's status is simply the initiative's own status.
+  const effectiveStatus: RoadmapStatus =
+    (form.status || (isMain ? initiative.status : (initiative.status || "Planned"))) as RoadmapStatus;
+  const effectiveStatusStyle = STATUS_STYLES[effectiveStatus] ?? STATUS_STYLES["Planned"];
+
   function set(key: keyof RoadmapSubBar, value: unknown) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -890,6 +905,8 @@ function WorkstreamModal({
             mainBarNorthStarMetric: form.northStarMetric || "",
             mainBarSuccessMetrics: form.successMetrics || "",
             strategyGoal: (form.strategyGoal ?? "") as StrategyGoal | "",
+            // The main bar's status is the initiative's own status.
+            status: (form.status || "Planned") as RoadmapStatus,
           }
         : {
             subBars: (initiative.subBars || []).map((sb) =>
@@ -965,6 +982,10 @@ function WorkstreamModal({
         {mode === "view" ? (
           <>
             <div className="modal-badges">
+              <span className="meta-badge status" style={{ background: effectiveStatusStyle.bg, color: effectiveStatusStyle.fg, borderColor: effectiveStatusStyle.border }}>
+                <span className="rmi-dot" style={{ background: effectiveStatusStyle.dot }} />
+                {effectiveStatus}
+              </span>
               {span && <span className="meta-badge tf">{unitRangeLabel(span.start, span.end)}</span>}
               {effectiveGoal && effectiveGoalMeta && (
                 <span className="meta-badge" style={{ background: effectiveGoalMeta.light, color: effectiveGoalMeta.color, borderColor: effectiveGoalMeta.light }}>
@@ -1054,6 +1075,19 @@ function WorkstreamModal({
                   <label className="field-label">Workstream name</label>
                   <input className="input" value={form.label}
                     onChange={(e) => set("label", e.target.value)} placeholder="e.g. Web, App, V2" />
+                </div>
+                <div className="field" style={{ marginTop: 10 }}>
+                  <label className="field-label">Status</label>
+                  <select className="select"
+                    value={isMain ? (form.status || "Planned") : (form.status ?? "")}
+                    onChange={(e) => set("status", e.target.value as RoadmapStatus | "")}>
+                    {!isMain && (
+                      <option value="">
+                        {`— Use initiative's status${initiative.status ? ` (${initiative.status})` : ""} —`}
+                      </option>
+                    )}
+                    {ROADMAP_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
                 </div>
                 <div className="field" style={{ marginTop: 10 }}>
                   <label className="field-label">Strategy goal</label>
@@ -1342,7 +1376,10 @@ function GanttRow({
                   onPointerDown={(e) => { e.stopPropagation(); onBarMoveStart(e, initiative.id, null); }}
                   title="Drag to move" />
               )}
-              <span className="gantt-bar-label" style={{ color: gc }}>{initiative.mainBarLabel || initiative.name}</span>
+              <span className="gantt-bar-label" style={{ color: gc }}>
+                <span className="gantt-bar-status-dot" style={{ background: (STATUS_STYLES[initiative.status] ?? STATUS_STYLES["Planned"]).dot }} title={initiative.status} />
+                {initiative.mainBarLabel || initiative.name}
+              </span>
               {!readOnly && !bar.clipRight && (
                 <div className="gantt-resize-handle gantt-resize-right"
                   onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "right"); }} />
@@ -1371,7 +1408,10 @@ function GanttRow({
                   onPointerDown={(e) => { e.stopPropagation(); onBarMoveStart(e, initiative.id, sb.id); }}
                   title="Drag to move" />
               )}
-              <span className="gantt-bar-label" style={{ color: gc }}>{sb.label}</span>
+              <span className="gantt-bar-label" style={{ color: gc }}>
+                <span className="gantt-bar-status-dot" style={{ background: (STATUS_STYLES[(sb.status || initiative.status) as RoadmapStatus] ?? STATUS_STYLES["Planned"]).dot }} title={sb.status || initiative.status} />
+                {sb.label}
+              </span>
               {!readOnly && !sbBar.clipRight && (
                 <div className="gantt-resize-handle gantt-resize-right"
                   onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "right", sb.id); }} />
@@ -2468,6 +2508,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
               northStarMetric: ws.mainBarNorthStarMetric,
               successMetrics: ws.mainBarSuccessMetrics,
               strategyGoal: ws.strategyGoal,
+              status: ws.status,
               comments: ws.mainBarComments,
             }
           : ws.subBars?.find((s) => s.id === workstreamModal.subBarId);

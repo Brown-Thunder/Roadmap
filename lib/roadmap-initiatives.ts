@@ -82,6 +82,8 @@ export interface RoadmapSubBar {
   // Strategy goal this workstream serves. Undefined = inherit the parent
   // initiative's goal.
   strategyGoal?: StrategyGoal | "";
+  // Status of this workstream. Undefined/"" = inherit the parent initiative's status.
+  status?: RoadmapStatus | "";
   comments?: RoadmapComment[]; // workstream-specific comments
 }
 
