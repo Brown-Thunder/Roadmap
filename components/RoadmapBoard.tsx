@@ -249,6 +249,9 @@ const RoadmapBoard = forwardRef<
   // Area reorder drag state (mouse-based, separate from card DnD).
   const [draggingArea, setDraggingArea] = useState<string | null>(null);
   const [dragOverArea, setDragOverArea] = useState<string | null>(null);
+  // Native area-reorder drag is only armed while the pointer is on the area's
+  // drag handle — otherwise the group's `draggable` would hijack card drags.
+  const [areaDragArmed, setAreaDragArmed] = useState<string | null>(null);
 
   const measureSpan = useCallback((id: string, el: HTMLElement | null) => {
     if (!el) return;
@@ -858,11 +861,11 @@ const RoadmapBoard = forwardRef<
     return groups.map((g) => (
       <div
         key={g.area}
-        draggable={!readOnly}
+        draggable={!readOnly && areaDragArmed === g.area}
         onDragStart={!readOnly ? () => onAreaDragStart(g.area) : undefined}
         onDragOver={!readOnly ? (e) => onAreaDragOver(e, g.area) : undefined}
         onDrop={!readOnly ? () => onAreaDrop(g.area) : undefined}
-        onDragEnd={!readOnly ? () => { setDraggingArea(null); setDragOverArea(null); } : undefined}
+        onDragEnd={!readOnly ? () => { setDraggingArea(null); setDragOverArea(null); setAreaDragArmed(null); } : undefined}
         style={{
           opacity: draggingArea === g.area ? 0.4 : 1,
           outline: dragOverArea === g.area ? "2px solid #6366f1" : undefined,
@@ -877,6 +880,13 @@ const RoadmapBoard = forwardRef<
                 className="area-drag-handle"
                 width="10" height="14" viewBox="0 0 10 14"
                 fill="none" aria-hidden="true"
+                onMouseDown={() => {
+                  setAreaDragArmed(g.area);
+                  // Safety net: disarm on the very next mouseup anywhere, so a
+                  // click that never becomes a drag can't leave the group armed.
+                  const off = () => { setAreaDragArmed(null); window.removeEventListener("mouseup", off); };
+                  window.addEventListener("mouseup", off);
+                }}
               >
                 <circle cx="2.5" cy="2" r="1.2" fill="currentColor" />
                 <circle cx="7.5" cy="2" r="1.2" fill="currentColor" />
