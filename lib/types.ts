@@ -1,10 +1,13 @@
 export type Timeframe = "This Week" | "Next Week" | "Future";
 
 export type Status =
-  | "In Flight"
+  | "Backlog"
   | "To Do"
-  | "At Risk"
-  | "Blocked"
+  | "In progress"
+  | "In Review"
+  | "QA Testing"
+  | "Ready for merge"
+  | "Ready for next release"
   | "Done";
 
 export type TShirtSize = "XS" | "S" | "M" | "L" | "XL";
@@ -90,11 +93,16 @@ export const AREA_ORDER: string[] = [
   "Other",
 ];
 
+// Dot colours per status. Green = not-yet-started / released / done,
+// amber = in-flight/review/QA/merge, purple = backlog. Mirrors the tracker.
 export const STATUS_COLORS: Record<string, string> = {
-  "In Flight": "#2563eb",
-  "To Do": "#6b7280",
-  "At Risk": "#ea580c",
-  Blocked: "#dc2626",
+  Backlog: "#8b5cf6",
+  "To Do": "#16a34a",
+  "In progress": "#d97706",
+  "In Review": "#d97706",
+  "QA Testing": "#d97706",
+  "Ready for merge": "#d97706",
+  "Ready for next release": "#16a34a",
   Done: "#16a34a",
 };
 
@@ -160,10 +168,13 @@ export const POD_OPTIONS = [
   "Other",
 ];
 export const STATUS_OPTIONS: Status[] = [
-  "In Flight",
+  "Backlog",
   "To Do",
-  "At Risk",
-  "Blocked",
+  "In progress",
+  "In Review",
+  "QA Testing",
+  "Ready for merge",
+  "Ready for next release",
   "Done",
 ];
 export const TSHIRT_OPTIONS: TShirtSize[] = ["XS", "S", "M", "L", "XL"];

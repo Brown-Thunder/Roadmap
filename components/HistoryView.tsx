@@ -12,12 +12,19 @@ import InitiativeModal from "./InitiativeModal";
 import UserMenu from "./UserMenu";
 import { useIsNarrow } from "@/lib/useViewMode";
 
+// Green = todo/released/done, amber = in-flight/review/QA/merge, purple = backlog.
+const GREEN_PILL  = { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0" };
+const AMBER_PILL  = { bg: "#fff7ed", fg: "#c2410c", border: "#fed7aa" };
+const PURPLE_PILL = { bg: "#f5f3ff", fg: "#6d28d9", border: "#ddd6fe" };
 const STATUS_PILL: Record<string, { bg: string; fg: string; border: string }> = {
-  "In Flight": { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe" },
-  "To Do":     { bg: "#f1f5f9", fg: "#475569", border: "#e2e8f0" },
-  "At Risk":   { bg: "#fff7ed", fg: "#c2410c", border: "#fed7aa" },
-  Blocked:     { bg: "#fef2f2", fg: "#b91c1c", border: "#fecaca" },
-  Done:        { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0" },
+  Backlog:                  PURPLE_PILL,
+  "To Do":                  GREEN_PILL,
+  "In progress":            AMBER_PILL,
+  "In Review":              AMBER_PILL,
+  "QA Testing":             AMBER_PILL,
+  "Ready for merge":        AMBER_PILL,
+  "Ready for next release": GREEN_PILL,
+  Done:                     GREEN_PILL,
 };
 
 const STASHER_ICON = (

@@ -83,12 +83,19 @@ const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> 
   dependencies:   { bg: "#fefce8", color: "#a16207", border: "#fde68a" },
 };
 
+// Green = todo/released/done, amber = in-flight/review/QA/merge, purple = backlog.
+const GREEN_PILL  = { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0", accent: "#22c55e" };
+const AMBER_PILL  = { bg: "#fff7ed", fg: "#c2410c", border: "#fed7aa", accent: "#f97316" };
+const PURPLE_PILL = { bg: "#f5f3ff", fg: "#6d28d9", border: "#ddd6fe", accent: "#8b5cf6" };
 const STATUS_PILL: Record<string, { bg: string; fg: string; border: string; accent: string }> = {
-  "In Flight": { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe", accent: "#3b82f6" },
-  "To Do":     { bg: "#f1f5f9", fg: "#475569", border: "#e2e8f0", accent: "#94a3b8" },
-  "At Risk":   { bg: "#fff7ed", fg: "#c2410c", border: "#fed7aa", accent: "#f97316" },
-  Blocked:     { bg: "#fef2f2", fg: "#b91c1c", border: "#fecaca", accent: "#ef4444" },
-  Done:        { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0", accent: "#22c55e" },
+  Backlog:                  PURPLE_PILL,
+  "To Do":                  GREEN_PILL,
+  "In progress":            AMBER_PILL,
+  "In Review":              AMBER_PILL,
+  "QA Testing":             AMBER_PILL,
+  "Ready for merge":        AMBER_PILL,
+  "Ready for next release": GREEN_PILL,
+  Done:                     GREEN_PILL,
 };
 
 function tagStyle(tag: string) {
