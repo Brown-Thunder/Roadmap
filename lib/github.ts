@@ -12,7 +12,7 @@
 
 const GITHUB_GRAPHQL = "https://api.github.com/graphql";
 
-export type TeamFilter = "Host/Platform" | "Customer" | "All";
+export type TeamFilter = "Backend" | "Frontend" | "All";
 
 export interface GithubIssue {
   id: string;
@@ -30,11 +30,13 @@ export interface GithubIssue {
 
 // Squad single-select options on the V3 board, split by team. Used to decide
 // which team an issue belongs to and to group the picker.
-export const HOST_SQUADS = ["Host", "Admin dashboard"] as const;
-export const CUSTOMER_SQUADS = ["Conversion", "Platform", "App", "Organic"] as const;
+//   Backend  = Host, Platform
+//   Frontend = Conversion, App, Organic, Admin dashboard
+export const BACKEND_SQUADS = ["Host", "Platform"] as const;
+export const FRONTEND_SQUADS = ["Conversion", "App", "Organic", "Admin dashboard"] as const;
 
-// Canonical grouping/sort order for squads (host squads first), then any others.
-export const SQUAD_ORDER = [...HOST_SQUADS, ...CUSTOMER_SQUADS] as readonly string[];
+// Canonical grouping/sort order for squads (backend squads first), then any others.
+export const SQUAD_ORDER = [...BACKEND_SQUADS, ...FRONTEND_SQUADS] as readonly string[];
 
 // Status column order on the V3 board — used to sort issues within a squad group.
 // Anything not listed sorts to the end (in board-agnostic issue-number order).
@@ -61,27 +63,27 @@ interface ViewClause {
   excludeStatuses: string[];
 }
 
-const TEAM_VIEWS: Record<"Host/Platform" | "Customer", ViewClause[]> = {
-  // Hosts — backend view:
+const TEAM_VIEWS: Record<"Backend" | "Frontend", ViewClause[]> = {
+  // Backend — backend view:
   //   repo:stasher-city/api  -status:Backlog,"QA Testing","Ready for merge","Ready for next release"
-  "Host/Platform": [
+  Backend: [
     {
-      squads: [...HOST_SQUADS],
+      squads: [...BACKEND_SQUADS],
       repos: ["api"],
       excludeStatuses: ["Backlog", "QA Testing", "Ready for merge", "Ready for next release"],
     },
   ],
-  // Customers — FE board + App board:
+  // Frontend — FE board + App board:
   //   repo:stasher-city/web,stasher-city/web-admin-dashboard  -status:Backlog,Done
   //   repo:stasher-city/mobile-app                            -status:"QA Testing"
-  Customer: [
+  Frontend: [
     {
-      squads: [...CUSTOMER_SQUADS],
+      squads: [...FRONTEND_SQUADS],
       repos: ["web", "web-admin-dashboard"],
       excludeStatuses: ["Backlog", "Done"],
     },
     {
-      squads: [...CUSTOMER_SQUADS],
+      squads: [...FRONTEND_SQUADS],
       repos: ["mobile-app"],
       excludeStatuses: ["QA Testing"],
     },
@@ -95,7 +97,7 @@ function repoShortName(nameWithOwner: string): string {
 // True if an issue passes ANY of a team's view clauses.
 export function issueMatchesTeam(
   issue: Pick<GithubIssue, "squad" | "repository" | "status">,
-  team: "Host/Platform" | "Customer",
+  team: "Backend" | "Frontend",
 ): boolean {
   const repo = repoShortName(issue.repository);
   return TEAM_VIEWS[team].some((clause) => {
@@ -283,14 +285,14 @@ function statusRank(status: string): number {
 }
 
 // List issues for the picker. When a team is selected, only that team's clauses
-// match (Hosts = backend view; Customers = FE + App views). team "All" returns
-// every issue. Results are grouped by squad (host squads first) and ordered by
-// status within each group, then by issue number.
+// match (Backend = api view; Frontend = FE + App views). team "All" returns
+// every issue. Results are grouped by squad (backend squads first) and ordered
+// by status within each group, then by issue number.
 export async function listProjectIssues(team: TeamFilter = "All"): Promise<GithubIssue[]> {
   const all = await fetchAll();
 
   let filtered = all.filter((i) => !i.isPR); // issues only
-  if (team === "Host/Platform" || team === "Customer") {
+  if (team === "Backend" || team === "Frontend") {
     filtered = filtered.filter((i) => issueMatchesTeam(i, team));
   }
 

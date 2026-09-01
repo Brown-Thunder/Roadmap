@@ -112,7 +112,18 @@ export const TIMEFRAME_ACCENT: Record<Timeframe, string> = {
   Future: "#64748b",
 };
 
-export const TEAM_OPTIONS = ["Host/Platform", "Customer"];
+// Stored team values (also the Airtable "Team" values).
+export const TEAM_OPTIONS = ["Backend", "Frontend"];
+
+// Human-facing labels for the two teams — shown on board buttons, filters and
+// in the Slack summary header. The stored value stays short (Backend/Frontend).
+export const TEAM_LABELS: Record<string, string> = {
+  Backend: "Host/Platform/Backend",
+  Frontend: "Customer/Frontend",
+};
+export function teamLabel(team: string): string {
+  return TEAM_LABELS[team] ?? team;
+}
 
 export const AREA_OPTIONS = [
   "Lockers",

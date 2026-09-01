@@ -14,6 +14,7 @@ import {
   TIMEFRAMES,
   TIMEFRAME_ACCENT,
   TEAM_OPTIONS,
+  teamLabel,
   Timeframe,
   colorForAssignee,
   primaryAssigneeOf,
@@ -1171,7 +1172,7 @@ const RoadmapBoard = forwardRef<
                 <span className="filter-label">Team</span>
                 <select className="select" value={team} onChange={(e) => setTeam(e.target.value)}>
                   <option value="All">All teams</option>
-                  {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{teamLabel(t)}</option>)}
                 </select>
               </div>
               <div className="filter-group">
@@ -1204,7 +1205,7 @@ const RoadmapBoard = forwardRef<
                 </button>
                 {slackDropdownOpen && (
                   <div className="slack-dropdown">
-                    {(["All", "Host/Platform", "Customer"] as const).map((t) => (
+                    {(["All", "Backend", "Frontend"] as const).map((t) => (
                       <button
                         key={t}
                         className="slack-dropdown-item"
@@ -1213,7 +1214,7 @@ const RoadmapBoard = forwardRef<
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
                         </svg>
-                        {t === "All" ? "All teams" : `${t} view`}
+                        {t === "All" ? "All teams" : `${teamLabel(t)} view`}
                       </button>
                     ))}
                   </div>
@@ -1231,7 +1232,7 @@ const RoadmapBoard = forwardRef<
                 <span className="filter-label">Team</span>
                 <select className="select" value={team} onChange={(e) => setTeam(e.target.value)}>
                   <option value="All">All teams</option>
-                  {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{teamLabel(t)}</option>)}
                 </select>
               </div>
               <div className="filter-group">
@@ -1433,7 +1434,7 @@ const RoadmapBoard = forwardRef<
               <div className="modal-header-left">
                 <h2>Preview Slack post</h2>
                 <p className="modal-subtitle">
-                  {slackPreview.team === "All" ? "All teams" : `${slackPreview.team} view`}
+                  {slackPreview.team === "All" ? "All teams" : `${teamLabel(slackPreview.team)} view`}
                   {" · Review the message and snapshot before posting."}
                 </p>
               </div>

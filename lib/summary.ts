@@ -1,4 +1,4 @@
-import { Initiative } from "./types";
+import { Initiative, teamLabel } from "./types";
 import { filterByTeam } from "./roadmap";
 
 // The canonical public URL — always the production project, never a deployment preview.
@@ -52,10 +52,10 @@ export function buildSummary(
   const nextWeek = byTf("Next Week");
   const future = byTf("Future");
 
-  const teamLabel = team && team !== "All" ? ` · ${team}` : "";
+  const teamSuffix = team && team !== "All" ? ` · ${teamLabel(team)}` : "";
   const lines: string[] = [];
 
-  lines.push(`🗺️ *Weekly Priorities${teamLabel} — ${weekLabel}*`);
+  lines.push(`🗺️ *Weekly Priorities${teamSuffix} — ${weekLabel}*`);
   lines.push("");
 
   if (thisWeek.length) {

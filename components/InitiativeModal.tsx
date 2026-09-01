@@ -5,6 +5,7 @@ import {
   Initiative,
   Comment,
   TEAM_OPTIONS,
+  teamLabel,
   AREA_OPTIONS,
   STATUS_OPTIONS,
   TIMEFRAMES,
@@ -31,7 +32,7 @@ type Draft = Partial<Initiative>;
 const EMPTY: Draft = {
   name: "",
   description: "",
-  team: "Host/Platform",
+  team: "Backend",
   area: "Lockers",
   pod: "3rd Party Lockers",
   spansPods: false,
@@ -255,8 +256,8 @@ export default function InitiativeModal({
   // Filter the full issue list by the selected team client-side (reusing the
   // V3 view logic from lib/github.ts), then group by Squad and order by Status.
   const ghSections = (() => {
-    const selectedTeam = form.team as "Host/Platform" | "Customer" | string;
-    const team = (selectedTeam === "Host/Platform" || selectedTeam === "Customer")
+    const selectedTeam = form.team as "Backend" | "Frontend" | string;
+    const team = (selectedTeam === "Backend" || selectedTeam === "Frontend")
       ? selectedTeam : null;
 
     const q = ghQuery.trim().toLowerCase();
@@ -773,7 +774,7 @@ export default function InitiativeModal({
                   transition: "all 0.12s",
                 }}
               >
-                {t}
+                {teamLabel(t)}
               </button>
             ))}
           </div>
@@ -818,8 +819,8 @@ export default function InitiativeModal({
                     <span className="gh-trigger-hint">
                       {ghLoading
                         ? "loading…"
-                        : form.team === "Customer" ? "Customers view"
-                        : form.team === "Host/Platform" ? "Hosts view"
+                        : form.team === "Frontend" ? "Frontend view"
+                        : form.team === "Backend" ? "Backend view"
                         : "all issues"}
                     </span>
                   </button>
