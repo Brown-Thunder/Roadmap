@@ -1,14 +1,14 @@
-// GitHub Project (v2) integration — reads issues from the "Stashboard V2"
-// org project (stasher-city / project #5) so they can prefill a new initiative.
+// GitHub Project (v2) integration — reads issues from the "Stasher V3" org
+// project (stasher-city / project #16) so they can prefill a new initiative.
 //
-// Projects v2 is GraphQL-only. The board's saved views (Hosts = view 42,
-// Customers = view 41) are NOT readable via the API, so we replicate their
-// filters in code using the Squad field + repo allowlist + status exclusions.
+// Projects v2 is GraphQL-only. The board's saved views are NOT readable via the
+// API, so we replicate their filter bars in code: a team maps to one or more
+// filter clauses (squad set + repo allowlist + status exclusions), OR-ed together.
 //
 // Env:
 //   GITHUB_TOKEN            fine-grained PAT or org token (read: projects + issues)
 //   GITHUB_ORG              org login (default "stasher-city")
-//   GITHUB_PROJECT_NUMBER   project number (default 5)
+//   GITHUB_PROJECT_NUMBER   project number (default 16)
 
 const GITHUB_GRAPHQL = "https://api.github.com/graphql";
 
@@ -24,37 +24,92 @@ export interface GithubIssue {
   assignees: string[]; // GitHub logins
   mappedAssignees?: string[]; // display names resolved from logins (added by the API route)
   status: string;      // project "Status" single-select value
-  squad: string;       // project "Squad" single-select value (Supply/Demand)
-  weekPlan2: string;   // project "Week Plan 2" DATE value (ISO "YYYY-MM-DD") or ""
+  squad: string;       // project "Squad" single-select value
   isPR: boolean;
 }
 
-// Replicates the two saved views. Repo names are matched on the short name
-// (without the owner prefix).
-const TEAM_VIEWS: Record<"Host/Platform" | "Customer", {
-  squad: string;
+// Squad single-select options on the V3 board, split by team. Used to decide
+// which team an issue belongs to and to group the picker.
+export const HOST_SQUADS = ["Host", "Admin dashboard"] as const;
+export const CUSTOMER_SQUADS = ["Conversion", "Platform", "App", "Organic"] as const;
+
+// Canonical grouping/sort order for squads (host squads first), then any others.
+export const SQUAD_ORDER = [...HOST_SQUADS, ...CUSTOMER_SQUADS] as readonly string[];
+
+// Status column order on the V3 board — used to sort issues within a squad group.
+// Anything not listed sorts to the end (in board-agnostic issue-number order).
+export const STATUS_ORDER = [
+  "To Do",
+  "In progress",
+  "For review",
+  "In Review",
+  "QA Testing",
+  "Ready for merge",
+  "Ready for next release",
+  "Done",
+  "Backlog",
+  "Blocked",
+] as const;
+
+// A single filter clause replicating one board view's filter bar. An issue
+// passes a clause if its squad is in `squads` (or squads empty), its repo is in
+// `repos` (short name, owner stripped; empty = any repo), and its status is not
+// in `excludeStatuses`. A team passes if ANY of its clauses match (OR).
+interface ViewClause {
+  squads: string[];
   repos: string[];
   excludeStatuses: string[];
-}> = {
-  // Hosts view (42): squad:Supply, those repos, excluding Done/Released
-  "Host/Platform": {
-    squad: "Supply",
-    repos: ["web", "api", "web-admin-dashboard", "web-hosts", "react-email-templates"],
-    excludeStatuses: ["Done", "Released"],
-  },
-  // Customers view (41): squad:Demand, those repos, excluding the discovery
-  // statuses + Known Issues
-  Customer: {
-    squad: "Demand",
-    repos: ["web", "api", "dummy"],
-    excludeStatuses: ["Discovery In Progress", "Discovery Backlog", "Discovery Done", "Known Issues"],
-  },
+}
+
+const TEAM_VIEWS: Record<"Host/Platform" | "Customer", ViewClause[]> = {
+  // Hosts — backend view:
+  //   repo:stasher-city/api  -status:Backlog,"QA Testing","Ready for merge","Ready for next release"
+  "Host/Platform": [
+    {
+      squads: [...HOST_SQUADS],
+      repos: ["api"],
+      excludeStatuses: ["Backlog", "QA Testing", "Ready for merge", "Ready for next release"],
+    },
+  ],
+  // Customers — FE board + App board:
+  //   repo:stasher-city/web,stasher-city/web-admin-dashboard  -status:Backlog,Done
+  //   repo:stasher-city/mobile-app                            -status:"QA Testing"
+  Customer: [
+    {
+      squads: [...CUSTOMER_SQUADS],
+      repos: ["web", "web-admin-dashboard"],
+      excludeStatuses: ["Backlog", "Done"],
+    },
+    {
+      squads: [...CUSTOMER_SQUADS],
+      repos: ["mobile-app"],
+      excludeStatuses: ["QA Testing"],
+    },
+  ],
 };
+
+function repoShortName(nameWithOwner: string): string {
+  return nameWithOwner.split("/").pop() || nameWithOwner;
+}
+
+// True if an issue passes ANY of a team's view clauses.
+export function issueMatchesTeam(
+  issue: Pick<GithubIssue, "squad" | "repository" | "status">,
+  team: "Host/Platform" | "Customer",
+): boolean {
+  const repo = repoShortName(issue.repository);
+  return TEAM_VIEWS[team].some((clause) => {
+    if (clause.squads.length && !clause.squads.includes(issue.squad)) return false;
+    if (clause.repos.length && !clause.repos.includes(repo)) return false;
+    if (clause.excludeStatuses.includes(issue.status)) return false;
+    return true;
+  });
+}
 
 function cfg() {
   const token = process.env.GITHUB_TOKEN;
   const org = process.env.GITHUB_ORG || "stasher-city";
-  const projectNumber = Number(process.env.GITHUB_PROJECT_NUMBER || "5");
+  const projectNumber = Number(process.env.GITHUB_PROJECT_NUMBER || "16");
   if (!token) throw new Error("GITHUB_TOKEN is not configured.");
   if (!projectNumber) throw new Error("GITHUB_PROJECT_NUMBER is not configured.");
   return { token, org, projectNumber };
@@ -104,9 +159,6 @@ query ($org: String!, $number: Int!, $cursor: String) {
           squad: fieldValueByName(name: "Squad") {
             ... on ProjectV2ItemFieldSingleSelectValue { name }
           }
-          weekPlan2: fieldValueByName(name: "Week Plan") {
-            ... on ProjectV2ItemFieldDateValue { date }
-          }
           content {
             __typename
             ... on Issue {
@@ -146,7 +198,6 @@ interface ItemsResponse {
         nodes: Array<{
           status: { name?: string } | null;
           squad: { name?: string } | null;
-          weekPlan2: { date?: string } | null;
           content: ContentNode | null;
         }>;
       };
@@ -209,7 +260,6 @@ async function crawlBoard(): Promise<GithubIssue[]> {
         assignees: c.assignees?.nodes?.map((a) => a.login) ?? [],
         status: node.status?.name || "",
         squad: node.squad?.name || "",
-        weekPlan2: node.weekPlan2?.date || "",
         isPR: c.__typename === "PullRequest",
       });
     }
@@ -221,35 +271,35 @@ async function crawlBoard(): Promise<GithubIssue[]> {
   return out;
 }
 
-function repoShortName(nameWithOwner: string): string {
-  return nameWithOwner.split("/").pop() || nameWithOwner;
+// Sort key helpers: known squads/statuses sort by their board order; anything
+// else falls to the end of its dimension.
+function squadRank(squad: string): number {
+  const i = SQUAD_ORDER.indexOf(squad);
+  return i === -1 ? SQUAD_ORDER.length : i;
+}
+function statusRank(status: string): number {
+  const i = (STATUS_ORDER as readonly string[]).indexOf(status);
+  return i === -1 ? STATUS_ORDER.length : i;
 }
 
-// List issues for the picker, replicating the saved-view filters per team.
-// team "All" returns everything (still excludes PRs for initiative prefill).
+// List issues for the picker. When a team is selected, only that team's clauses
+// match (Hosts = backend view; Customers = FE + App views). team "All" returns
+// every issue. Results are grouped by squad (host squads first) and ordered by
+// status within each group, then by issue number.
 export async function listProjectIssues(team: TeamFilter = "All"): Promise<GithubIssue[]> {
   const all = await fetchAll();
 
   let filtered = all.filter((i) => !i.isPR); // issues only
-
-  const view = team !== "All" ? TEAM_VIEWS[team] : null;
-  if (view) {
-    filtered = filtered.filter((i) => {
-      if (view.squad && i.squad !== view.squad) return false;
-      if (view.repos.length && !view.repos.includes(repoShortName(i.repository))) return false;
-      if (view.excludeStatuses.includes(i.status)) return false;
-      return true;
-    });
+  if (team === "Host/Platform" || team === "Customer") {
+    filtered = filtered.filter((i) => issueMatchesTeam(i, team));
   }
 
-  // Order by "Week Plan 2" date, newest first; undated (backlog) items last.
-  // Within the same date/backlog, newest issue number first.
   return filtered.sort((a, b) => {
-    if (a.weekPlan2 && b.weekPlan2) {
-      if (a.weekPlan2 !== b.weekPlan2) return b.weekPlan2.localeCompare(a.weekPlan2);
-    } else if (a.weekPlan2 !== b.weekPlan2) {
-      return a.weekPlan2 ? -1 : 1; // dated before undated
-    }
-    return b.number - a.number;
+    const sq = squadRank(a.squad) - squadRank(b.squad);
+    if (sq !== 0) return sq;
+    if (a.squad !== b.squad) return a.squad.localeCompare(b.squad); // stable for unknown squads
+    const st = statusRank(a.status) - statusRank(b.status);
+    if (st !== 0) return st;
+    return a.number - b.number;
   });
 }

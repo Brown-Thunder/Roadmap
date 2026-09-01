@@ -22,6 +22,7 @@ import {
   DepType,
   DepLink,
 } from "@/lib/types";
+import { issueMatchesTeam, SQUAD_ORDER, STATUS_ORDER } from "@/lib/github";
 import type { GithubIssue } from "@/lib/github";
 import AssigneePicker from "./AssigneePicker";
 
@@ -57,13 +58,6 @@ function todayISO(): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
-}
-
-// "2026-06-08" -> "Mon 8 Jun 2026" for the Week Plan 2 section headers.
-function formatWeekPlanDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
 const DEP_CHIP_STYLE: Record<DepType, { bg: string; color: string; border: string }> = {
@@ -258,62 +252,57 @@ export default function InitiativeModal({
   const [ghQuery, setGhQuery] = useState("");
   const [ghLinkedUrl, setGhLinkedUrl] = useState<string>("");
 
-  // Filter the full issue list by team client-side, replicating the saved-view
-  // logic from lib/github.ts so no extra server call is needed on team change.
-  const TEAM_VIEWS: Record<"Host/Platform" | "Customer", {
-    squad: string; repos: string[]; excludeStatuses: string[];
-  }> = {
-    "Host/Platform": {
-      squad: "Supply",
-      repos: ["web", "api", "web-admin-dashboard", "web-hosts", "react-email-templates"],
-      excludeStatuses: ["Done", "Released"],
-    },
-    Customer: {
-      squad: "Demand",
-      repos: ["web", "api", "dummy"],
-      excludeStatuses: ["Discovery In Progress", "Discovery Backlog", "Discovery Done", "Known Issues"],
-    },
-  };
-
+  // Filter the full issue list by the selected team client-side (reusing the
+  // V3 view logic from lib/github.ts), then group by Squad and order by Status.
   const ghSections = (() => {
     const selectedTeam = form.team as "Host/Platform" | "Customer" | string;
-    const view = (selectedTeam === "Host/Platform" || selectedTeam === "Customer")
-      ? TEAM_VIEWS[selectedTeam] : null;
+    const team = (selectedTeam === "Host/Platform" || selectedTeam === "Customer")
+      ? selectedTeam : null;
 
     const q = ghQuery.trim().toLowerCase();
     const base = ghIssues
       .filter((i) => !i.isPR)
-      .filter((i) => {
-        if (!view) return true;
-        const repo = i.repository.split("/").pop() || i.repository;
-        if (view.squad && i.squad !== view.squad) return false;
-        if (view.repos.length && !view.repos.includes(repo)) return false;
-        if (view.excludeStatuses.includes(i.status)) return false;
-        return true;
-      })
+      .filter((i) => (team ? issueMatchesTeam(i, team) : true))
       .filter((i) =>
         !q ||
         i.title.toLowerCase().includes(q) ||
         String(i.number).includes(q) ||
         i.repository.toLowerCase().includes(q) ||
+        i.status.toLowerCase().includes(q) ||
+        i.squad.toLowerCase().includes(q) ||
         i.assignees.some((a) => a.toLowerCase().includes(q))
       )
-      .slice(0, 200);
+      .slice(0, 300);
 
+    const squadRank = (s: string) => {
+      const i = (SQUAD_ORDER as readonly string[]).indexOf(s);
+      return i === -1 ? SQUAD_ORDER.length : i;
+    };
+    const statusRank = (s: string) => {
+      const i = (STATUS_ORDER as readonly string[]).indexOf(s);
+      return i === -1 ? STATUS_ORDER.length : i;
+    };
+
+    // Group by squad (host squads first), status order within each group.
     const sections: { key: string; label: string; backlog: boolean; items: GithubIssue[] }[] = [];
     for (const issue of base) {
-      const key = issue.weekPlan2 || "__backlog__";
+      const key = issue.squad || "__nosquad__";
       let section = sections.find((s) => s.key === key);
       if (!section) {
-        section = {
-          key,
-          label: issue.weekPlan2 ? formatWeekPlanDate(issue.weekPlan2) : "Backlog",
-          backlog: !issue.weekPlan2,
-          items: [],
-        };
+        section = { key, label: issue.squad || "No squad", backlog: !issue.squad, items: [] };
         sections.push(section);
       }
       section.items.push(issue);
+    }
+    sections.sort((a, b) => {
+      const sq = squadRank(a.key) - squadRank(b.key);
+      return sq !== 0 ? sq : a.label.localeCompare(b.label);
+    });
+    for (const s of sections) {
+      s.items.sort((a, b) => {
+        const st = statusRank(a.status) - statusRank(b.status);
+        return st !== 0 ? st : a.number - b.number;
+      });
     }
     return sections;
   })();
@@ -825,7 +814,7 @@ export default function InitiativeModal({
                     style={{ flex: 1 }}
                   >
                     <GithubMark />
-                    <span>Start from a Stashboard V2 issue</span>
+                    <span>Start from a Stasher V3 issue</span>
                     <span className="gh-trigger-hint">
                       {ghLoading
                         ? "loading…"
@@ -870,11 +859,7 @@ export default function InitiativeModal({
                     {ghSections.map((section) => (
                       <div key={section.key} className="gh-section">
                         <div className={`gh-section-head ${section.backlog ? "backlog" : ""}`}>
-                          {section.backlog ? (
-                            <span>Backlog</span>
-                          ) : (
-                            <span><span className="gh-section-cal" aria-hidden>🗓</span> Week of {section.label}</span>
-                          )}
+                          <span><span className="gh-section-cal" aria-hidden>👥</span> {section.label}</span>
                           <span className="gh-section-count">{section.items.length}</span>
                         </div>
                         {section.items.map((issue) => (
