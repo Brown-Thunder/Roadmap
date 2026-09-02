@@ -1,9 +1,9 @@
 // GitHub Project (v2) integration — reads issues from the "Stasher V3" org
 // project (stasher-city / project #16) so they can prefill a new initiative.
 //
-// Projects v2 is GraphQL-only. The board's saved views are NOT readable via the
-// API, so we replicate their filter bars in code: a team maps to one or more
-// filter clauses (squad set + repo allowlist + status exclusions), OR-ed together.
+// Projects v2 is GraphQL-only. A team maps to a set of Squads: the picker shows
+// every ticket (parent or child) tagged with one of the team's squads, in any
+// repo and at any status. Results are grouped by squad and ordered by status.
 //
 // Env:
 //   GITHUB_TOKEN            fine-grained PAT or org token (read: projects + issues)
@@ -53,59 +53,19 @@ export const STATUS_ORDER = [
   "Blocked",
 ] as const;
 
-// A single filter clause replicating one board view's filter bar. An issue
-// passes a clause if its squad is in `squads` (or squads empty), its repo is in
-// `repos` (short name, owner stripped; empty = any repo), and its status is not
-// in `excludeStatuses`. A team passes if ANY of its clauses match (OR).
-interface ViewClause {
-  squads: string[];
-  repos: string[];
-  excludeStatuses: string[];
-}
-
-const TEAM_VIEWS: Record<"Backend" | "Frontend", ViewClause[]> = {
-  // Backend — backend view:
-  //   repo:stasher-city/api  -status:Backlog,"QA Testing","Ready for merge","Ready for next release"
-  Backend: [
-    {
-      squads: [...BACKEND_SQUADS],
-      repos: ["api"],
-      excludeStatuses: ["Backlog", "QA Testing", "Ready for merge", "Ready for next release"],
-    },
-  ],
-  // Frontend — FE board + App board:
-  //   repo:stasher-city/web,stasher-city/web-admin-dashboard  -status:Backlog,Done
-  //   repo:stasher-city/mobile-app                            -status:"QA Testing"
-  Frontend: [
-    {
-      squads: [...FRONTEND_SQUADS],
-      repos: ["web", "web-admin-dashboard"],
-      excludeStatuses: ["Backlog", "Done"],
-    },
-    {
-      squads: [...FRONTEND_SQUADS],
-      repos: ["mobile-app"],
-      excludeStatuses: ["QA Testing"],
-    },
-  ],
+// The squads that make up each team. A team matches every ticket (parent or
+// child) tagged with one of its squads — regardless of repo or status.
+const TEAM_SQUADS: Record<"Backend" | "Frontend", readonly string[]> = {
+  Backend: BACKEND_SQUADS,
+  Frontend: FRONTEND_SQUADS,
 };
 
-function repoShortName(nameWithOwner: string): string {
-  return nameWithOwner.split("/").pop() || nameWithOwner;
-}
-
-// True if an issue passes ANY of a team's view clauses.
+// True if an issue's squad belongs to the given team.
 export function issueMatchesTeam(
-  issue: Pick<GithubIssue, "squad" | "repository" | "status">,
+  issue: Pick<GithubIssue, "squad">,
   team: "Backend" | "Frontend",
 ): boolean {
-  const repo = repoShortName(issue.repository);
-  return TEAM_VIEWS[team].some((clause) => {
-    if (clause.squads.length && !clause.squads.includes(issue.squad)) return false;
-    if (clause.repos.length && !clause.repos.includes(repo)) return false;
-    if (clause.excludeStatuses.includes(issue.status)) return false;
-    return true;
-  });
+  return TEAM_SQUADS[team].includes(issue.squad);
 }
 
 function cfg() {
@@ -284,8 +244,8 @@ function statusRank(status: string): number {
   return i === -1 ? STATUS_ORDER.length : i;
 }
 
-// List issues for the picker. When a team is selected, only that team's clauses
-// match (Backend = api view; Frontend = FE + App views). team "All" returns
+// List issues for the picker. When a team is selected, every ticket tagged with
+// one of that team's squads is shown (any repo, any status). team "All" returns
 // every issue. Results are grouped by squad (backend squads first) and ordered
 // by status within each group, then by issue number.
 export async function listProjectIssues(team: TeamFilter = "All"): Promise<GithubIssue[]> {
