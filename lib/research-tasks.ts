@@ -3,7 +3,7 @@
 // individual research tasks placed on the same quarterly Gantt timeline.
 //
 //  Name          (Single line text)   — research task name
-//  Assignee      (Single line text)   — free text, not tied to the People table
+//  Assignee      (Single line text)   — one of RESEARCH_ASSIGNEE_OPTIONS
 //  Status        (Single select)      — Planned | In Progress | Done | On Hold
 //  Quarter       (Single select)      — Q3 2026 … Q4 2027 (start quarter)
 //  End Quarter   (Single select)      — Q3 2026 … Q4 2027 (inclusive)
@@ -24,10 +24,23 @@ export const RESEARCH_STATUS_OPTIONS: ResearchStatus[] = [
   "On Hold",
 ];
 
+// Who can be assigned a research task. A fixed list rather than the People
+// table, which covers the whole company — only these six do research.
+export const RESEARCH_ASSIGNEE_OPTIONS = [
+  "Oski",
+  "Pedro",
+  "Emily",
+  "Amit",
+  "JB",
+  "Luke",
+] as const;
+
+export type ResearchAssignee = typeof RESEARCH_ASSIGNEE_OPTIONS[number];
+
 export interface ResearchTask {
   id: string;
   name: string;
-  assignee: string;      // free text
+  assignee: string;      // one of RESEARCH_ASSIGNEE_OPTIONS, or "" if unassigned
   status: ResearchStatus;
   quarter: string;       // start quarter, e.g. "Q3 2026"
   endQuarter: string;    // end quarter (inclusive); empty = same as quarter

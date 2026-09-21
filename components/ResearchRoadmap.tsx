@@ -5,6 +5,7 @@ import {
   ResearchTask,
   ResearchStatus,
   RESEARCH_STATUS_OPTIONS,
+  RESEARCH_ASSIGNEE_OPTIONS,
 } from "@/lib/research-tasks";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -264,9 +265,15 @@ function ResearchModal({ task, onClose, onSaved, onDeleted, readOnly }: ModalPro
                 <div className="rmi-grid-2" style={{ marginTop: 12 }}>
                   <div className="field">
                     <label className="field-label">Assignee</label>
-                    <input className="input" value={form.assignee || ""}
-                      onChange={(e) => set("assignee", e.target.value)}
-                      placeholder="Who's doing this research?" />
+                    <select className="select" value={form.assignee || ""}
+                      onChange={(e) => set("assignee", e.target.value)}>
+                      <option value="">— Unassigned —</option>
+                      {RESEARCH_ASSIGNEE_OPTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+                      {/* Keep any legacy value that isn't in the list selectable. */}
+                      {form.assignee && !RESEARCH_ASSIGNEE_OPTIONS.includes(form.assignee as typeof RESEARCH_ASSIGNEE_OPTIONS[number]) && (
+                        <option value={form.assignee}>{form.assignee}</option>
+                      )}
+                    </select>
                   </div>
                   <div className="field">
                     <label className="field-label">Status</label>
@@ -818,8 +825,11 @@ export default function ResearchRoadmap({ initial, readOnly = false, mobile = fa
     flash("Deleted");
   }
 
-  // Distinct assignees, for the filter dropdown.
-  const assignees = Array.from(new Set(items.map((t) => t.assignee).filter(Boolean))).sort();
+  // Filter roster: the standing list, plus any legacy name still on a task.
+  const assignees = Array.from(new Set<string>([
+    ...RESEARCH_ASSIGNEE_OPTIONS,
+    ...items.map((t) => t.assignee).filter(Boolean),
+  ]));
 
   const filtered = items.filter((t) => {
     if (filterStatus !== "All" && t.status !== filterStatus) return false;
