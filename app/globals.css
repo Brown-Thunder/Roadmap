@@ -3678,3 +3678,32 @@ a.link:hover { text-decoration: underline; }
   .gantt-owner-chip { display: none; }
 }
 
+
+/* ── Research Roadmap ─────────────────────────────────────────────────────── */
+.rs-modal { max-width: 520px; }
+
+/* Resolved timeline span shown under the quarter pickers. */
+.rs-span-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rs-view-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Inline form error + required marker, shared with the roadmap modals. */
+.field-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.required { color: #dc2626; }

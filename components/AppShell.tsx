@@ -4,26 +4,30 @@ import { useState, useEffect } from "react";
 import RoadmapBoard from "./RoadmapBoard";
 import ProductRoadmap from "./ProductRoadmap";
 import StasherStrategy from "./StasherStrategy";
+import ResearchRoadmap from "./ResearchRoadmap";
 import UserMenu from "./UserMenu";
 import { Initiative } from "@/lib/types";
 import { RoadmapInitiative } from "@/lib/roadmap-initiatives";
+import { ResearchTask } from "@/lib/research-tasks";
 import { useViewMode } from "@/lib/useViewMode";
 
-export type AppTab = "weekly" | "roadmap" | "strategy";
+export type AppTab = "weekly" | "roadmap" | "research" | "strategy";
 
 const TABS: { id: AppTab; label: string; shortLabel: string }[] = [
   { id: "weekly",   label: "Weekly Priorities", shortLabel: "Weekly" },
   { id: "roadmap",  label: "Product Roadmap",   shortLabel: "Roadmap" },
+  { id: "research", label: "Research Roadmap",  shortLabel: "Research" },
   { id: "strategy", label: "Stasher Strategy",  shortLabel: "Strategy" },
 ];
 
 // Persist the active tab so a refresh keeps the user where they were.
 const TAB_STORAGE_KEY = "pulse.activeTab";
-const VALID_TABS: AppTab[] = ["weekly", "roadmap", "strategy"];
+const VALID_TABS: AppTab[] = ["weekly", "roadmap", "research", "strategy"];
 
 interface Props {
   initiatives: Initiative[];
   roadmapInitiatives: RoadmapInitiative[];
+  researchTasks: ResearchTask[];
   canManageEditors?: boolean;
   readOnly?: boolean;
   roadmapPublished?: boolean;
@@ -33,6 +37,7 @@ interface Props {
 export default function AppShell({
   initiatives,
   roadmapInitiatives,
+  researchTasks,
   canManageEditors = false,
   readOnly = false,
   roadmapPublished = false,
@@ -138,6 +143,10 @@ export default function AppShell({
 
       <div style={activeTab !== "roadmap" ? { display: "none" } : {}}>
         <ProductRoadmap initial={roadmapInitiatives} readOnly={readOnly} published={roadmapPublished} mobile={mobile} />
+      </div>
+
+      <div style={activeTab !== "research" ? { display: "none" } : {}}>
+        <ResearchRoadmap initial={researchTasks} readOnly={readOnly} mobile={mobile} />
       </div>
 
       <div style={activeTab !== "strategy" ? { display: "none" } : {}}>

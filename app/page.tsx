@@ -1,5 +1,6 @@
 import { listInitiatives } from "@/lib/airtable";
 import { listRoadmapInitiatives } from "@/lib/roadmap-initiatives";
+import { listResearchTasks, ResearchTask } from "@/lib/research-tasks";
 import { isRoadmapPublished } from "@/lib/settings";
 import AppShell from "@/components/AppShell";
 import ErrorState from "@/components/ErrorState";
@@ -29,12 +30,14 @@ export default async function Home() {
 
   let initiatives: Initiative[] = [];
   let roadmapInitiatives: RoadmapInitiative[] = [];
+  let researchTasks: ResearchTask[] = [];
   let roadmapPublished = false;
   let error: string | null = null;
   try {
-    [initiatives, roadmapInitiatives, roadmapPublished] = await Promise.all([
+    [initiatives, roadmapInitiatives, researchTasks, roadmapPublished] = await Promise.all([
       listInitiatives(),
       listRoadmapInitiatives().catch(() => []),
+      listResearchTasks().catch(() => []),
       isRoadmapPublished().catch(() => false),
     ]);
   } catch (e: any) {
@@ -47,6 +50,7 @@ export default async function Home() {
     <AppShell
       initiatives={initiatives}
       roadmapInitiatives={roadmapInitiatives}
+      researchTasks={researchTasks}
       canManageEditors={editorAccess}
       roadmapPublished={roadmapPublished}
     />
