@@ -25,7 +25,7 @@
 //  Notes           (Long text)
 //  Comments        (Long text)          — JSON array of RoadmapComment
 //  Order           (Number)             — sort order within swimlane
-//  Strategy        (Single line text)   — ROADMAP_STRATEGIES id (Q4 2026 onwards)
+//  Strategy        (Single line text)   — ROADMAP_STRATEGIES id, e.g. C1 (Q4 2026 onwards)
 //  Frontend %      (Number)             — share of the work that is frontend (0–100)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -87,19 +87,83 @@ export const COMPANY_GOALS: CompanyGoal[] = [
   },
 ];
 
+// Strategies are the Q4 strategy "chapters". Each sits under its primary goal on
+// the roadmap; `alsoGoals` lists any other goals it contributes to.
 export interface RoadmapStrategy {
   id: string;            // stored in the Airtable "Strategy" field
   goal: CompanyGoal["id"];
+  alsoGoals?: CompanyGoal["id"][];
   label: string;
+  horizon: string;       // e.g. "Now → Next"
+  description: string;   // why this chapter matters
+  measures: string;      // how we'll know it's working
 }
 
 export const ROADMAP_STRATEGIES: RoadmapStrategy[] = [
-  { id: "S1.1", goal: "1", label: "Fund the journey: grow NSPU 10% in 6 weeks" },
-  { id: "S1.2", goal: "1", label: "Win the moment of need: a world-class Google Maps and AI experience" },
-  { id: "S1.3", goal: "1", label: "Seed what's next: explore new revenue streams" },
-  { id: "S2.1", goal: "2", label: "Extend the network: scale international supply through third-party lockers" },
-  { id: "S3.1", goal: "3", label: "Make the network ours: lockers as the most attractive option" },
+  {
+    id: "C1",
+    goal: "1",
+    label: "Fund the journey: grow NSPU 10% in 6 weeks",
+    horizon: "Now",
+    description:
+      "Growth is behind where it needs to be for Q1, but the business is more profitable than planned. " +
+      "The fastest way to close the gap is to earn more from the bookings we already get. That means " +
+      "charging what demand supports, selling flexibility customers want, and keeping revenue we " +
+      "currently hand back as cash refunds.",
+    measures:
+      "NSPU vs the 10% target, the share of refunds paid as credit instead of cash, flexibility upsell " +
+      "attach rate, and revenue per booking.",
+  },
+  {
+    id: "C2",
+    goal: "1",
+    alsoGoals: ["3"],
+    label: "Grow the market: customer acquisition that scales",
+    horizon: "Now → Next",
+    description:
+      "Our biggest barrier to growth is awareness: most travellers don't know luggage storage exists " +
+      "until they're stuck with their bags. Paid ads reach people one search at a time. In Q4 we'll build " +
+      "channels that reach many customers at once, by getting in front of travellers before the need " +
+      "hits, through the partners, events and organisations they already deal with.",
+    measures:
+      "Bookings and revenue by acquisition channel (partner, event, group, business), and the share of " +
+      "new customers who don't come through paid ads.",
+  },
+  {
+    id: "C3",
+    goal: "3",
+    label: "Make the network ours: lockers as the most attractive option",
+    horizon: "Now → Next",
+    description:
+      "Lockers are the heart of the Anywhere Network. They're always open, need no staff and give us " +
+      "better margins. In cities with our own lockers, they already take 15.2% of platform bookings, up " +
+      "from 5.3% in July. They earn more per booking (£10.64 vs £8.71), and people who go looking for a " +
+      "locker convert well. The problem is discovery: only 18.5% of sessions in locker cities ever view " +
+      "one, and only 16.5% in London. If more people find lockers, more bookings and more margin follow, " +
+      "and each locker pays back faster.",
+    measures:
+      "Platform locker share (baseline 15.2%), locker consideration rate (18.5%) and locker choice rate " +
+      "(43%), all measured in locker cities.",
+  },
+  {
+    id: "C4",
+    goal: "2",
+    label: "Extend the network: scale international supply through third-party lockers",
+    horizon: "Now → Next",
+    description:
+      "We can't build lockers in every travel hub ourselves. The abstraction layer delivered in Q3 means " +
+      "each new third-party network plugs in at low marginal cost. That's how we reach new cities and " +
+      "markets without scaling operations at the same rate.",
+    measures:
+      "Live third-party locations, new cities reaching 100+ bookings/month, and bookings per third-party " +
+      "location.",
+  },
 ];
+
+// Whether a strategy contributes to the given goal (primary or secondary).
+export function strategyServesGoal(s: RoadmapStrategy | undefined, goalId: string): boolean {
+  return !!s && (s.goal === goalId || (s.alsoGoals ?? []).includes(goalId as CompanyGoal["id"]));
+}
 
 export const STRATEGY_BY_ID: Record<string, RoadmapStrategy> = Object.fromEntries(
   ROADMAP_STRATEGIES.map((s) => [s.id, s])

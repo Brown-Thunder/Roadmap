@@ -22,6 +22,8 @@ import {
   CompanyGoal,
   ROADMAP_STRATEGIES,
   STRATEGY_BY_ID,
+  RoadmapStrategy,
+  strategyServesGoal,
 } from "@/lib/roadmap-initiatives";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -277,7 +279,9 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
   // Goal → strategy roadmap: the goal picked in the form (narrows the strategies).
   const [goalId, setGoalId] = useState<string>(STRATEGY_BY_ID[initiative.strategy]?.goal ?? "");
   const strategyMeta = STRATEGY_BY_ID[form.strategy];
-  const companyGoal = COMPANY_GOALS.find((g) => g.id === (strategyMeta?.goal ?? goalId));
+  // A strategy can serve several goals: keep the picked goal if it's one of them.
+  const effectiveGoalId = strategyMeta && !strategyServesGoal(strategyMeta, goalId) ? strategyMeta.goal : goalId;
+  const companyGoal = COMPANY_GOALS.find((g) => g.id === effectiveGoalId);
   const frontendPct = form.frontendPct ?? 50;
 
   const gn = newStructure ? companyGoal?.id : goalNum(form.strategyGoal);
@@ -483,7 +487,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                   <select className="select" value={companyGoal?.id ?? ""}
                     onChange={(e) => {
                       setGoalId(e.target.value);
-                      if (STRATEGY_BY_ID[form.strategy]?.goal !== e.target.value) set("strategy", "");
+                      if (!strategyServesGoal(STRATEGY_BY_ID[form.strategy], e.target.value)) set("strategy", "");
                     }}>
                     <option value="">— Select a goal —</option>
                     {COMPANY_GOALS.map((g) => (
@@ -496,7 +500,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                   <select className="select" value={form.strategy || ""} disabled={!companyGoal}
                     onChange={(e) => set("strategy", e.target.value)}>
                     <option value="">{companyGoal ? "— Select a strategy —" : "— Pick a goal first —"}</option>
-                    {ROADMAP_STRATEGIES.filter((st) => st.goal === companyGoal?.id).map((st) => (
+                    {ROADMAP_STRATEGIES.filter((st) => companyGoal && strategyServesGoal(st, companyGoal.id)).map((st) => (
                       <option key={st.id} value={st.id}>{st.label}</option>
                     ))}
                   </select>
@@ -1389,6 +1393,88 @@ function SubBarNameModal({
   );
 }
 
+// ── Strategy detail modal ─────────────────────────────────────────────────────
+// Opened by clicking a strategy header (Q4 2026 onwards). Shows why the strategy
+// matters, how we'll measure it, and its initiatives in the quarter being viewed.
+
+function StrategyModal({
+  strategy,
+  quarter,
+  initiatives,
+  onClose,
+  onOpenInitiative,
+}: {
+  strategy: RoadmapStrategy;
+  quarter: string;
+  initiatives: RoadmapInitiative[];
+  onClose: () => void;
+  onOpenInitiative: (i: RoadmapInitiative) => void;
+}) {
+  const goals = [strategy.goal, ...(strategy.alsoGoals ?? [])]
+    .map((id) => COMPANY_GOALS.find((g) => g.id === id))
+    .filter((g): g is CompanyGoal => !!g);
+  const gm = GOAL_META[strategy.goal];
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal rmi-modal" onClick={(e) => e.stopPropagation()}>
+        <div style={{ height: 4, background: gm.color, borderRadius: "18px 18px 0 0" }} />
+        <div className="modal-header">
+          <div className="modal-header-left">
+            <h2>{strategy.label}</h2>
+            <div className="modal-subtitle"><span>Strategy</span></div>
+          </div>
+          <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <div className="modal-badges">
+          {goals.map((g) => (
+            <span key={g.id} className="meta-badge"
+              style={{ background: GOAL_META[g.id].light, color: GOAL_META[g.id].color, borderColor: GOAL_META[g.id].light }}>
+              Goal {g.id} · {g.name}
+            </span>
+          ))}
+          <span className="meta-badge tf">{strategy.horizon}</span>
+        </div>
+
+        <div className="modal-section">
+          <p className="rmi-section-label">Description</p>
+          <p className="modal-desc">{strategy.description}</p>
+        </div>
+
+        <div className="modal-section">
+          <p className="rmi-section-label">How we&apos;ll know</p>
+          <div className="modal-notes">{strategy.measures}</div>
+        </div>
+
+        <div className="modal-section">
+          <p className="rmi-section-label">Initiatives in {quarter}</p>
+          {initiatives.length === 0 ? (
+            <div className="comments-empty">No initiatives in this quarter.</div>
+          ) : (
+            <div className="rm-strategy-initiatives">
+              {initiatives.map((i) => {
+                const ss = STATUS_STYLES[i.status] ?? STATUS_STYLES["Planned"];
+                return (
+                  <button key={i.id} className="rm-strategy-initiative" onClick={() => onOpenInitiative(i)}>
+                    <span className="rmi-dot" style={{ background: ss.dot }} title={i.status} />
+                    <span className="rm-strategy-initiative-name">{i.name}</span>
+                    <span className="rm-strategy-initiative-status">{i.status}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="modal-actions">
+          <div style={{ flex: 1 }} />
+          <button className="btn btn-soft" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Gantt row ─────────────────────────────────────────────────────────────────
 
 function GanttRow({
@@ -1672,6 +1758,8 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const [modal, setModal] = useState<RoadmapInitiative | null | "new">(null);
   // Dedicated workstream modal: which sub-bar of which initiative to show.
   const [workstreamModal, setWorkstreamModal] = useState<{ initiativeId: string; subBarId: string } | null>(null);
+  // Strategy whose description popup is open (Q4 2026 onwards).
+  const [strategyModal, setStrategyModal] = useState<RoadmapStrategy | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
   const [isPublished, setIsPublished] = useState(published);
@@ -2361,10 +2449,12 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     if (!newStructure && i.strategy) return false;
     if (filterStatus !== "All" && i.status !== filterStatus) return false;
     if (filterGoal !== "All") {
-      const gn = newStructure
-        ? STRATEGY_BY_ID[i.strategy]?.goal ?? null
-        : i.strategyGoal ? SUBGOAL_TO_GOAL[i.strategyGoal as StrategyGoal] : null;
-      if (gn !== filterGoal) return false;
+      if (newStructure) {
+        if (!strategyServesGoal(STRATEGY_BY_ID[i.strategy], filterGoal)) return false;
+      } else {
+        const gn = i.strategyGoal ? SUBGOAL_TO_GOAL[i.strategyGoal as StrategyGoal] : null;
+        if (gn !== filterGoal) return false;
+      }
     }
     if (filterTeam !== "All" && i.team !== filterTeam) return false;
     // Only initiatives with a bar or workstream in the selected quarter. Editors
@@ -2382,14 +2472,14 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   // Sections of row groups. Legacy: one section of Summary groups. New: one
   // section per company goal with a group per strategy, plus any initiatives
   // without a strategy at the bottom. Empty goals / strategies are hidden.
-  interface RowGroup { key: string; label: string; goalNum?: string; items: RoadmapInitiative[] }
+  interface RowGroup { key: string; label: string; goalNum?: string; strategy?: RoadmapStrategy; items: RoadmapInitiative[] }
   interface Section { goal: CompanyGoal | null; groups: RowGroup[] }
   const sections: Section[] = [];
   if (newStructure) {
     for (const goal of COMPANY_GOALS) {
       const groups = ROADMAP_STRATEGIES
         .filter((st) => st.goal === goal.id && itemsByGroup[st.id])
-        .map((st) => ({ key: st.id, label: st.label, goalNum: goal.id, items: itemsByGroup[st.id] }));
+        .map((st) => ({ key: st.id, label: st.label, goalNum: goal.id, strategy: st, items: itemsByGroup[st.id] }));
       if (groups.length > 0) sections.push({ goal, groups });
     }
     if (itemsByGroup[UNASSIGNED_GROUP]) {
@@ -2618,10 +2708,17 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
             return (
               <div key={group.key} className="rml-group">
                 <div
-                  className="rml-group-header"
+                  className={`rml-group-header${group.strategy ? " rm-strategy-header" : ""}`}
                   style={{ background: meta ? meta.bg : "#f8fafc", borderLeft: `4px solid ${meta ? meta.color : "#cbd5e1"}` }}
+                  {...(group.strategy ? {
+                    role: "button",
+                    tabIndex: 0,
+                    title: "View strategy",
+                    onClick: () => setStrategyModal(group.strategy!),
+                  } : {})}
                 >
                   <span className="rml-group-name">{summary}</span>
+                  {group.strategy && <span className="rm-strategy-info" aria-hidden>ⓘ</span>}
                   {!newStructure && gn && meta && (
                     <span className="rml-goal-badge" style={{ background: meta.light, color: meta.color }}>Goal {gn}</span>
                   )}
@@ -2749,7 +2846,16 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                 <div key={summary} className="gantt-group">
                   {/* Group header */}
                   <div
-                    className={`gantt-group-header${newStructure ? " gantt-group-header-strategy" : ""}`}
+                    className={`gantt-group-header${newStructure ? " gantt-group-header-strategy" : ""}${group.strategy ? " rm-strategy-header" : ""}`}
+                    {...(group.strategy ? {
+                      role: "button",
+                      tabIndex: 0,
+                      title: "View strategy",
+                      onClick: () => setStrategyModal(group.strategy!),
+                      onKeyDown: (e: React.KeyboardEvent) => {
+                        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setStrategyModal(group.strategy!); }
+                      },
+                    } : {})}
                     style={{
                       background: meta ? meta.bg : "#f8fafc",
                       borderLeft: `4px solid ${meta ? meta.color : "#cbd5e1"}`,
@@ -2757,6 +2863,13 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                   >
                     <div className="gantt-label-cell">
                       <span className="gantt-group-name" title={group.label}>{group.label}</span>
+                      {group.strategy && <span className="rm-strategy-info" aria-hidden>ⓘ</span>}
+                      {group.strategy?.alsoGoals?.map((g) => (
+                        <span key={g} className="gantt-goal-badge"
+                          style={{ background: GOAL_META[g].light, color: GOAL_META[g].color }}>
+                          Also Goal {g}
+                        </span>
+                      ))}
                       {groupTeams.map((t) => (
                         <span key={t} className={`gantt-team-chip team-${t.toLowerCase()}`}>{t}</span>
                       ))}
@@ -2877,6 +2990,16 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
           />
         );
       })()}
+
+      {strategyModal && (
+        <StrategyModal
+          strategy={strategyModal}
+          quarter={selectedQuarter}
+          initiatives={itemsByGroup[strategyModal.id] ?? []}
+          onClose={() => setStrategyModal(null)}
+          onOpenInitiative={(i) => { setStrategyModal(null); setModal(i); }}
+        />
+      )}
 
       {pendingSubBar && (
         <SubBarNameModal
