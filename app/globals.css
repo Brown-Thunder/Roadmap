@@ -2911,7 +2911,8 @@ a.link:hover { text-decoration: underline; }
   cursor: pointer;
   transition: background 0.1s, color 0.1s, box-shadow 0.1s;
 }
-.rm-view-btn:hover { color: var(--ink); }
+.rm-view-btn:hover:not(:disabled) { color: var(--ink); }
+.rm-view-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .rm-view-btn.active {
   background: var(--panel);
   color: var(--accent);

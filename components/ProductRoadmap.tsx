@@ -115,30 +115,28 @@ function currentQuarterIdx(): number {
 // Total months covered by the quarter range (each quarter = 3 months).
 const TOTAL_MONTHS = QUARTERS.length * 3;
 
-// Zoom levels. `months` is how many month columns should fit in the visible
-// timeline viewport at that zoom. The timeline always spans the full range and
-// scrolls; the selector just sets how many months are shown at once, so each
-// column's px width is derived from the measured viewport width ÷ months.
-const VIEW_OPTIONS = [
-  { id: "1M",  label: "1M",  months: 1 },
-  { id: "3M",  label: "3M",  months: 3 },
-  { id: "6M",  label: "6M",  months: 6 },
-  { id: "12M", label: "12M", months: 12 },
-] as const;
-type ViewId = (typeof VIEW_OPTIONS)[number]["id"];
+const TOTAL_UNITS = TOTAL_MONTHS * UNITS_PER_MONTH;
 
-// Fallback column widths used before the timeline width has been measured.
-const FALLBACK_COL_WIDTH: Record<ViewId, number> = {
-  "1M": 520, "3M": 190, "6M": 110, "12M": 64,
-};
+// The roadmap is viewed one quarter at a time, picked by year + Q1–Q4.
+const QUARTER_YEARS = Array.from(new Set(QUARTERS.map((q) => parseInt(q.slice(3)))));
+const QUARTER_NUMS = ["Q1", "Q2", "Q3", "Q4"] as const;
 
-function monthsPerView(view: ViewId): number {
-  return VIEW_OPTIONS.find((v) => v.id === view)?.months ?? 6;
+// Fallback column width used before the timeline width has been measured.
+const FALLBACK_COL_WIDTH = 190;
+
+// Every [start, end) span an initiative occupies: its own bar plus its workstreams.
+function allSpansOf(i: RoadmapInitiative): { start: number; end: number }[] {
+  const spans: { start: number; end: number }[] = [];
+  const primary = spanUnitsOf(i);
+  if (primary) spans.push(primary);
+  for (const sb of i.subBars || []) {
+    if (sb.startUnit != null && sb.endUnit != null) spans.push({ start: sb.startUnit, end: sb.endUnit });
+  }
+  return spans;
 }
 
-// Build the full set of month columns across the entire quarter range. The view
-// (zoom) does not change which months exist — only their on-screen width — so
-// bars stay date-locked and the user can scroll the whole roadmap at any zoom.
+// Build the full set of month columns across the entire quarter range; the
+// selected quarter's three months are sliced out of this.
 function buildAllMonths(): MonthCol[] {
   const cols: MonthCol[] = [];
   for (let abs = 0; abs < TOTAL_MONTHS; abs++) {
@@ -1458,7 +1456,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
   const [isPublished, setIsPublished] = useState(published);
   const [publishing, setPublishing] = useState(false);
-  const [view, setView] = useState<ViewId>("3M");
+  const [selectedQIdx, setSelectedQIdx] = useState<number>(() => currentQuarterIdx());
   const [snapMenuOpen, setSnapMenuOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const snapshotRef = useRef<HTMLDivElement | null>(null);
@@ -1507,15 +1505,36 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     trackWidth: number;
   } | null>(null);
   const ganttTableRef = useRef<HTMLDivElement | null>(null);
+  // The table remounts when a quarter has no initiatives, so track the element in
+  // state to re-measure whenever it (re)appears.
+  const [tableEl, setTableEl] = useState<HTMLDivElement | null>(null);
+  const setTableRef = useCallback((el: HTMLDivElement | null) => {
+    ganttTableRef.current = el;
+    snapshotRef.current = el;
+    setTableEl(el);
+  }, []);
   const currentQIdx = currentQuarterIdx();
-  // The full timeline always exists; the view only changes column width (zoom).
-  const months = useMemo(() => buildAllMonths(), []);
+  const selectedQuarter = QUARTERS[selectedQIdx];
+  const selectedYear = parseInt(selectedQuarter.slice(3));
+  // Only the selected quarter's three months are shown.
+  const months = useMemo(
+    () => buildAllMonths().filter((m) => m.quarterIdx === selectedQIdx),
+    [selectedQIdx],
+  );
+
+  function selectYear(year: number) {
+    // Keep the same Q number when the new year has it, else its first quarter.
+    const sameQ = `${selectedQuarter.slice(0, 2)} ${year}`;
+    if (sameQ in QUARTER_IDX) { setSelectedQIdx(QUARTER_IDX[sameQ as Quarter]); return; }
+    const first = QUARTERS.findIndex((q) => q.endsWith(` ${year}`));
+    if (first >= 0) setSelectedQIdx(first);
+  }
 
   // Measure the visible timeline width (container minus the frozen label column)
-  // so each zoom shows exactly N months in the viewport regardless of screen size.
+  // so the quarter's three months fill the viewport regardless of screen size.
   const [trackViewport, setTrackViewport] = useState(0);
   useEffect(() => {
-    const el = ganttTableRef.current;
+    const el = tableEl;
     if (!el || typeof ResizeObserver === "undefined") return;
     const measure = () => {
       const labelCell = el.querySelector<HTMLElement>(".gantt-label-cell");
@@ -1526,25 +1545,15 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [view]);
+  }, [tableEl]);
 
-  // Column width = visible track width ÷ months-per-view. Falls back to a sensible
+  // Column width = visible track width ÷ 3 months. Falls back to a sensible
   // fixed width until the viewport has been measured.
-  const colWidth = trackViewport > 0
-    ? trackViewport / monthsPerView(view)
-    : FALLBACK_COL_WIDTH[view];
+  const colWidth = trackViewport > 0 ? trackViewport / 3 : FALLBACK_COL_WIDTH;
 
-  // Unit range = the whole roadmap, so bars are positioned against fixed dates.
-  const windowStartUnit = 0;
-  const windowEndUnit = TOTAL_MONTHS * UNITS_PER_MONTH;
-
-  // On mount and whenever the zoom changes, scroll so the current quarter sits at
-  // the left edge of the timeline (just past the frozen label column).
-  useEffect(() => {
-    const el = ganttTableRef.current;
-    if (!el) return;
-    el.scrollLeft = currentQIdx * 3 * colWidth;
-  }, [colWidth, currentQIdx]);
+  // Unit range = the selected quarter; bars outside it are clipped at the edges.
+  const windowStartUnit = quarterToStartUnit(selectedQIdx);
+  const windowEndUnit = windowStartUnit + UNITS_PER_QUARTER;
 
   function flash(msg: string, err = false) {
     setToast({ msg, err });
@@ -1852,7 +1861,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       const u = unitAt(ev.clientX);
       const delta = u - gu;
       const dur = oe - os;
-      const newStart = Math.max(windowStartUnit, Math.min(windowEndUnit - dur, os + delta));
+      const newStart = Math.max(0, Math.min(TOTAL_UNITS - dur, os + delta));
       if (newStart !== os) moved = true;
       setMovePreview({ start: newStart, end: newStart + dur });
     }
@@ -1870,7 +1879,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       const u = unitAt(ev.clientX);
       const delta = u - gu;
       const dur = oe - os;
-      const finalStart = Math.max(windowStartUnit, Math.min(windowEndUnit - dur, os + delta));
+      const finalStart = Math.max(0, Math.min(TOTAL_UNITS - dur, os + delta));
       const finalEnd = finalStart + dur;
       if (finalStart === os || !moved) return; // a plain click → let the bar's onClick open the modal
       // Only suppress the trailing click when the bar actually moved.
@@ -2069,12 +2078,22 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     if (srcGroup !== dstGroup) return; // cross-group not supported
     if (result.source.index === result.destination.index) return;
 
+    // Drag indices refer to the visible (filtered) rows, so resolve the moved item
+    // and the item it was dropped onto, then reorder within the full group.
+    const visible = bySummary[srcGroup] || [];
+    const srcIdx = result.source.index;
+    const dstIdx = result.destination.index;
+    const movedId = visible[srcIdx]?.id;
+    const targetId = visible[dstIdx]?.id;
+    if (!movedId || !targetId) return;
+
     setItems((prev) => {
       // Build the new order within the group, preserving the order of all items.
       const groupItems = prev.filter((i) => (i.summary || "Other") === srcGroup);
-      const reordered = [...groupItems];
-      const [moved] = reordered.splice(result.source.index, 1);
-      reordered.splice(result.destination!.index, 0, moved);
+      const reordered = groupItems.filter((i) => i.id !== movedId);
+      const moved = groupItems.find((i) => i.id === movedId)!;
+      const targetPos = reordered.findIndex((i) => i.id === targetId);
+      reordered.splice(dstIdx > srcIdx ? targetPos + 1 : targetPos, 0, moved);
 
       // Assign fresh order values and persist any that changed.
       const orderById = new Map<string, number>();
@@ -2110,7 +2129,11 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       if (gn !== filterGoal) return false;
     }
     if (filterTeam !== "All" && i.team !== filterTeam) return false;
-    return true;
+    // Only initiatives with a bar or workstream in the selected quarter. Editors
+    // also see unscheduled initiatives so they can place them on the timeline.
+    const spans = allSpansOf(i);
+    if (spans.length === 0) return !readOnly;
+    return spans.some((s) => s.start < windowEndUnit && s.end > windowStartUnit);
   });
 
   const summaries: string[] = [];
@@ -2255,22 +2278,33 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
         </div>
         <span className="rm-count">{filtered.length} initiative{filtered.length !== 1 ? "s" : ""}</span>
 
-        {/* Timeline zoom switcher — desktop only (mobile uses a list) */}
-        {!mobile && (
-          <div className="rm-view-switch" role="group" aria-label="Timeline zoom">
-            {VIEW_OPTIONS.map((opt) => (
+        {/* Quarter picker — year, then Q1–Q4 */}
+        <div className="filter-group">
+          <span className="filter-label">Year</span>
+          <select className="select" value={selectedYear}
+            onChange={(e) => selectYear(parseInt(e.target.value))}>
+            {QUARTER_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="rm-view-switch" role="group" aria-label="Quarter">
+          {QUARTER_NUMS.map((qn) => {
+            const label = `${qn} ${selectedYear}`;
+            const available = label in QUARTER_IDX;
+            const active = label === selectedQuarter;
+            return (
               <button
-                key={opt.id}
-                className={`rm-view-btn${view === opt.id ? " active" : ""}`}
-                onClick={() => setView(opt.id)}
-                aria-pressed={view === opt.id}
-                title={`${opt.label} zoom`}
+                key={qn}
+                className={`rm-view-btn${active ? " active" : ""}`}
+                onClick={() => available && setSelectedQIdx(QUARTER_IDX[label as Quarter])}
+                aria-pressed={active}
+                disabled={!available}
+                title={available ? label : `${label} is outside the roadmap range`}
               >
-                {opt.label}
+                {qn}
               </button>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
 
         {!readOnly && !mobile && (
           <span className="gantt-hint">Click cells to place · drag ▐ handle to resize · drag ⠿ to reorder</span>
@@ -2280,7 +2314,9 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       {/* Gantt table */}
       {summaries.length === 0 ? (
         <div className="rm-empty">
-          No initiatives yet.{!readOnly && " Click \"+ Add initiative\" to get started."}
+          {items.length === 0
+            ? <>No initiatives yet.{!readOnly && " Click \"+ Add initiative\" to get started."}</>
+            : `No initiatives in ${selectedQuarter}.`}
         </div>
       ) : mobile ? (
         /* ── Mobile: grouped initiative list (tap a card to view/edit) ── */
@@ -2338,10 +2374,9 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
         <DragDropContext onDragEnd={onDragEnd}>
           <div
             className={`gantt-table${readOnly ? " gantt-readonly" : ""}`}
-            ref={(el) => { ganttTableRef.current = el; snapshotRef.current = el; }}
+            ref={setTableRef}
           >
-            {/* Quarter section header — labels stay pinned to the left edge of their
-                quarter block and scroll-reveal the next quarter as you scroll. */}
+            {/* Quarter section header — the selected quarter's label */}
             <div className="gantt-quarter-row">
               <div className="gantt-label-cell gantt-quarter-corner" />
               <div className="gantt-track-grid" style={{ gridTemplateColumns: `repeat(${months.length}, var(--gantt-col-w))` }}>
@@ -2379,7 +2414,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                       className={`gantt-cell gantt-header-cell${col.isQuarterStart ? " gantt-quarter-start" : ""}${isActiveQ ? " gantt-active-q-col" : ""}`}
                     >
                       <span className="gantt-m-label">
-                        {view === "1M" ? col.fullLabel : col.label}
+                        {col.fullLabel}
                       </span>
                       {horizon && (
                         <span className="gantt-horizon-label">{horizon}</span>
