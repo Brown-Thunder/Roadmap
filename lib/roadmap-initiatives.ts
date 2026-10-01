@@ -71,7 +71,7 @@ export const COMPANY_GOALS: CompanyGoal[] = [
     id: "1",
     name: "Sustainable Growth",
     measure: "revenue net of ads",
-    contribution: "Win high-intent Maps/AI demand, lift revenue per booking, test new revenue streams",
+    contribution: "Lift revenue per booking, and build acquisition channels that don't rely on paid ads: partnerships, events, groups and businesses",
   },
   {
     id: "2",
@@ -83,7 +83,7 @@ export const COMPANY_GOALS: CompanyGoal[] = [
     id: "3",
     name: "Defend & Deepen",
     measure: "UK bookings growth",
-    contribution: "Make our own lockers the default choice, which grows UK share and pays back locker investment",
+    contribution: "Make our own lockers the default choice, and turn UK events into a repeatable source of demand",
   },
 ];
 
