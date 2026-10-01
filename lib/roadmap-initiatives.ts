@@ -124,7 +124,11 @@ export const ROADMAP_STRATEGIES: RoadmapStrategy[] = [
       "Our biggest barrier to growth is awareness: most travellers don't know luggage storage exists " +
       "until they're stuck with their bags. Paid ads reach people one search at a time. In Q4 we'll build " +
       "channels that reach many customers at once, by getting in front of travellers before the need " +
-      "hits, through the partners, events and organisations they already deal with.",
+      "hits, through the partners, events and organisations they already deal with.\n\n" +
+      "More and more travellers find storage through Google Maps and AI assistants, at the exact moment " +
+      "they need it. These are our highest-intent channels, and conversion there also feeds back into " +
+      "ranking. If we don't convert this traffic, we risk it walking straight to the location, or to a " +
+      "competitor.",
     measures:
       "Bookings and revenue by acquisition channel (partner, event, group, business), and the share of " +
       "new customers who don't come through paid ads.",
