@@ -3708,3 +3708,107 @@ a.link:hover { text-decoration: underline; }
 }
 
 .required { color: #dc2626; }
+
+/* ── Product Roadmap — goal → strategy layout (Q4 2026 onwards) ── */
+.gantt-goal-header {
+  display: flex;
+  align-items: stretch;
+  width: max-content;
+  min-width: 100%;
+  min-height: 54px;
+  color: #fff;
+  border-top: 2px solid var(--line-strong);
+}
+.gantt-goal-header:first-of-type { border-top: none; }
+.gantt-goal-header .gantt-label-cell {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  background: inherit;
+  border-right: 1px solid rgba(255, 255, 255, 0.25);
+}
+.gantt-goal-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.gantt-goal-measure {
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.85;
+  line-height: 1.3;
+}
+.gantt-goal-track {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  opacity: 0.95;
+}
+/* Strategy labels are long: keep the header within the label column and let the
+   text run over the band rather than widening the row. */
+.gantt-group-header-strategy .gantt-label-cell {
+  width: 260px;
+  min-width: 260px;
+}
+@media (max-width: 768px) {
+  .gantt-group-header-strategy .gantt-label-cell { width: 140px; min-width: 140px; }
+}
+
+/* Frontend / backend split */
+.rm-split-legend,
+.rmi-split-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.rm-split-legend span,
+.rmi-split-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.rm-split-legend i,
+.rmi-split-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.rmi-split-range { width: 100%; accent-color: #22c55e; }
+.rmi-split-preview {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+}
+.rmi-split-badge { color: #0f172a; border-color: transparent; }
+.rmi-static-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 9px 0;
+}
+
+/* Mobile list goal header */
+.rml-goal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: #fff;
+  margin-bottom: -6px;
+}
+.rml-goal-title { font-size: 14px; font-weight: 800; letter-spacing: -0.01em; }
+.rml-goal-measure { font-size: 12px; font-weight: 600; opacity: 0.85; }

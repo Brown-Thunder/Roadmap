@@ -25,6 +25,8 @@
 //  Notes           (Long text)
 //  Comments        (Long text)          — JSON array of RoadmapComment
 //  Order           (Number)             — sort order within swimlane
+//  Strategy        (Single line text)   — ROADMAP_STRATEGIES id (Q4 2026 onwards)
+//  Frontend %      (Number)             — share of the work that is frontend (0–100)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const API_BASE = "https://api.airtable.com/v0";
@@ -52,6 +54,56 @@ export const STRATEGY_GOAL_LABELS: Record<StrategyGoal, string> = {
   "3.2": "3.2 · Own supply where we're confident in utilisation",
   "3.3": "3.3 · Position our brand in high-footfall zones",
 };
+
+// ── Goal → Strategy hierarchy (Q4 2026 onwards) ──────────────────────────────
+// From Q4 2026 the roadmap is organised as company goal → strategy → initiative.
+// Earlier quarters keep the legacy Summary / Strategy Goal grouping above.
+
+export interface CompanyGoal {
+  id: "1" | "2" | "3";
+  name: string;          // e.g. "Sustainable Growth"
+  measure: string;       // e.g. "revenue net of ads"
+  contribution: string;  // how product contributes
+}
+
+export const COMPANY_GOALS: CompanyGoal[] = [
+  {
+    id: "1",
+    name: "Sustainable Growth",
+    measure: "revenue net of ads",
+    contribution: "Win high-intent Maps/AI demand, lift revenue per booking, test new revenue streams",
+  },
+  {
+    id: "2",
+    name: "Every Global Travel Hub",
+    measure: "75 cities at 100+ bookings/month",
+    contribution: "Scale supply into new cities through third-party locker networks, without adding operational load",
+  },
+  {
+    id: "3",
+    name: "Defend & Deepen",
+    measure: "UK bookings growth",
+    contribution: "Make our own lockers the default choice, which grows UK share and pays back locker investment",
+  },
+];
+
+export interface RoadmapStrategy {
+  id: string;            // stored in the Airtable "Strategy" field
+  goal: CompanyGoal["id"];
+  label: string;
+}
+
+export const ROADMAP_STRATEGIES: RoadmapStrategy[] = [
+  { id: "S1.1", goal: "1", label: "Fund the journey: grow NSPU 10% in 6 weeks" },
+  { id: "S1.2", goal: "1", label: "Win the moment of need: a world-class Google Maps and AI experience" },
+  { id: "S1.3", goal: "1", label: "Seed what's next: explore new revenue streams" },
+  { id: "S2.1", goal: "2", label: "Extend the network: scale international supply through third-party lockers" },
+  { id: "S3.1", goal: "3", label: "Make the network ours: lockers as the most attractive option" },
+];
+
+export const STRATEGY_BY_ID: Record<string, RoadmapStrategy> = Object.fromEntries(
+  ROADMAP_STRATEGIES.map((s) => [s.id, s])
+);
 
 export const ROADMAP_STATUS_OPTIONS: RoadmapStatus[] = [
   "Planned",
@@ -114,6 +166,10 @@ export interface RoadmapInitiative {
   subBars: RoadmapSubBar[];
   northStarMetric: string;   // single headline metric this initiative moves
   successMetrics: string;    // how we'll track success (comma-separated or prose)
+  // Q4 2026 onwards: ROADMAP_STRATEGIES id this initiative serves ("" = legacy).
+  strategy: string;
+  // Share of the work that is frontend, 0–100 (backend = the rest). null = not set.
+  frontendPct: number | null;
   notes: string;
   comments: RoadmapComment[];
   order: number;
@@ -165,6 +221,8 @@ function toRoadmapInitiative(rec: any): RoadmapInitiative {
     })(),
     northStarMetric: f["North Star Metric"] || "",
     successMetrics: f["Success Metrics"] || "",
+    strategy: f["Strategy"] || "",
+    frontendPct: typeof f["Frontend %"] === "number" ? f["Frontend %"] : null,
     notes: f["Notes"] || "",
     comments: (() => {
       try { return f["Comments"] ? JSON.parse(f["Comments"]) : []; }
@@ -195,6 +253,8 @@ function toFields(input: Partial<RoadmapInitiative>): Record<string, any> {
   if (input.subBars !== undefined) f["Sub Bars"] = JSON.stringify(input.subBars);
   if (input.northStarMetric !== undefined) f["North Star Metric"] = input.northStarMetric;
   if (input.successMetrics !== undefined) f["Success Metrics"] = input.successMetrics;
+  if (input.strategy !== undefined) f["Strategy"] = input.strategy;
+  if (input.frontendPct !== undefined) f["Frontend %"] = input.frontendPct;
   if (input.notes !== undefined) f["Notes"] = input.notes;
   if (input.comments !== undefined) f["Comments"] = JSON.stringify(input.comments);
   if (input.order !== undefined) f["Order"] = input.order;
