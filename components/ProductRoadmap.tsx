@@ -2972,6 +2972,17 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
         </div>
       ) : (
       <>
+      {/* Planning caveat — kept prominent so the roadmap isn't read as a commitment */}
+      <div className="rm-caveat" role="note">
+        <span className="rm-caveat-icon" aria-hidden>!</span>
+        <div>
+          <p className="rm-caveat-title">This roadmap and its estimates are subject to change throughout the quarter.</p>
+          <p className="rm-caveat-body">
+            Dates, phases and priorities are our current best plan and will be updated as we learn more.
+          </p>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="rm-filters">
         <div className="filter-group">

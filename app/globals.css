@@ -4094,3 +4094,46 @@ a.link:hover { text-decoration: underline; }
   line-height: 1.5;
 }
 .ms-tag-risk { border-color: #dc2626; color: #dc2626; }
+
+/* Product Roadmap — planning caveat banner */
+.rm-caveat {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #fffbeb;
+  border: 1.5px solid #f59e0b;
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 18px;
+}
+.rm-caveat-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rm-caveat-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #78350f;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+.rm-caveat-body {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: #92400e;
+  line-height: 1.5;
+}
+@media (max-width: 600px) {
+  .rm-caveat { padding: 14px 16px; gap: 10px; }
+  .rm-caveat-title { font-size: 16px; }
+}
