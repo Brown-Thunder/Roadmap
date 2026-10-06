@@ -175,16 +175,17 @@ function quartersForSpan(start: number, end: number): { quarter: string; endQuar
   return { quarter: clampQ(sq), endQuarter: eq > sq ? clampQ(eq) : "" };
 }
 
-// Phase bar colours. Design is hatched and testing is outlined, so the four read
-// apart even where colours are hard to tell apart.
+// Phase colours. As in the Q4 roadmap prototype, design is hatched, build work
+// (backend / frontend) is solid and testing & monitoring is a light fill with an
+// outline, so the phases read apart even where colours are hard to tell apart.
 const PHASE_STYLE: Record<PhaseType, { color: string; background: string; border: string }> = {
   design: {
-    color: "#7c3aed",
-    background: "repeating-linear-gradient(135deg, #c4b5fd 0 4px, #ede9fe 4px 8px)",
+    color: "#6d28d9",
+    background: "repeating-linear-gradient(135deg, #8b5cf6 0 4px, #ddd6fe 4px 8px)",
     border: "#7c3aed",
   },
-  backend: { color: "#1d4ed8", background: "#93c5fd", border: "#2563eb" },
-  frontend: { color: "#15803d", background: "#86efac", border: "#16a34a" },
+  backend: { color: "#1d4ed8", background: "#60a5fa", border: "#3b82f6" },
+  frontend: { color: "#15803d", background: "#4ade80", border: "#22c55e" },
   testing: { color: "#b45309", background: "#fef3c7", border: "#d97706" },
 };
 
@@ -202,16 +203,44 @@ function phasesSpan(phases: RoadmapPhase[]): { start: number; end: number } | nu
   };
 }
 
-// The fields kept in step with an initiative's phases, so quarter filtering, the
-// quarter dropdown and the Stasher Strategy tab keep working.
-function derivedFromPhases(phases: RoadmapPhase[]): Partial<RoadmapInitiative> {
-  const span = phasesSpan(phases);
-  if (!span) return { phases };
-  return { phases, startUnit: span.start, endUnit: span.end, ...quartersForSpan(span.start, span.end) };
-}
-
 function phaseRangeLabel(p: RoadmapPhase): string {
   return `${PHASE_LABELS[p.type]} · ${unitRangeLabel(p.startUnit, p.endUnit)}`;
+}
+
+// Hover text for an initiative's bar: its name, then each phase in date order.
+function phasesTooltip(name: string, phases: RoadmapPhase[]): string {
+  const sorted = [...phases].sort((a, b) => a.startUnit - b.startUnit || a.endUnit - b.endUnit);
+  return [name, ...sorted.map(phaseRangeLabel)].join("\n");
+}
+
+// Split [from, to) into week slices by which phases are active, merging
+// neighbouring weeks with the same phases. A slice with no active phase is a gap;
+// a slice with several (e.g. backend alongside frontend) is drawn as stripes.
+function phaseSegments(phases: RoadmapPhase[], from: number, to: number): { units: number; types: PhaseType[] }[] {
+  const segs: { units: number; types: PhaseType[] }[] = [];
+  for (let u = from; u < to; u++) {
+    const types = PHASE_TYPES.filter((t) => phases.some((p) => p.type === t && p.startUnit <= u && u < p.endUnit));
+    const last = segs[segs.length - 1];
+    if (last && last.types.join() === types.join()) last.units += 1;
+    else segs.push({ units: 1, types });
+  }
+  return segs;
+}
+
+// The coloured body of an initiative's single bar, covering [from, to).
+function PhaseSegments({ phases, from, to }: { phases: RoadmapPhase[]; from: number; to: number }) {
+  return (
+    <div className="phase-segs" aria-hidden>
+      {phaseSegments(phases, from, to).map((seg, i) => (
+        <div key={i} className={`phase-seg${seg.types.length === 0 ? " phase-seg-gap" : ""}`} style={{ flexGrow: seg.units }}>
+          {seg.types.map((t) => (
+            <div key={t} className={`phase-stripe phase-${t}`}
+              style={{ background: PHASE_STYLE[t].background, borderColor: PHASE_STYLE[t].border }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function newPhaseId(): string {
@@ -304,6 +333,35 @@ function shiftSpan(start: number, end: number, delta: number): { start: number; 
   const e = Math.min(TOTAL_UNITS, end + delta);
   if (s >= TOTAL_UNITS) s = TOTAL_UNITS - 1;
   return { start: s, end: Math.max(e, s + 1) };
+}
+
+// A small preview of an initiative's bar across one quarter, as drawn on the
+// roadmap. Used in the initiative form and detail view.
+function PhasePreview({ phases, quarterIdx }: { phases: RoadmapPhase[]; quarterIdx: number }) {
+  const qStart = quarterToStartUnit(quarterIdx);
+  const qEnd = qStart + UNITS_PER_QUARTER;
+  const span = phasesSpan(phases);
+  const from = span ? Math.max(span.start, qStart) : 0;
+  const to = span ? Math.min(span.end, qEnd) : 0;
+  const quarter = QUARTERS[quarterIdx];
+  const months = QUARTER_MONTHS[quarter.slice(0, 2)].map((m) => MONTH_ABBR[m]);
+  return (
+    <div className="rmi-phase-preview">
+      <div className="rmi-phase-preview-track">
+        {span && to > from && (
+          <div className="rmi-phase-preview-bar" style={{
+            left: `${((from - qStart) / UNITS_PER_QUARTER) * 100}%`,
+            width: `${((to - from) / UNITS_PER_QUARTER) * 100}%`,
+          }}>
+            <PhaseSegments phases={phases} from={from} to={to} />
+          </div>
+        )}
+      </div>
+      <div className="rmi-phase-preview-months">
+        {months.map((m) => <span key={m}>{m}</span>)}
+      </div>
+    </div>
+  );
 }
 
 function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defaultEdit, newStructure, defaultQuarter }: ModalProps) {
@@ -614,6 +672,10 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
             {/* Section: Phases */}
             <div className="rmi-section">
               <div className="rmi-section-title">Phases</div>
+              <p className="rmi-phase-help">
+                Set how long each discipline takes. The roadmap draws them as one bar, split by phase.
+              </p>
+              {formPhases.length > 0 && <PhasePreview phases={formPhases} quarterIdx={phaseQIdx} />}
               {formPhases.length === 0 && (
                 <div className="rmi-ws-empty">No phases yet. Add the design, backend, frontend and testing work, week by week.</div>
               )}
@@ -876,6 +938,9 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
             {(initiative.phases || []).length === 0 ? (
               <div className="rmi-ws-empty">No phases yet.{!readOnly && " Click Edit to add them."}</div>
             ) : (
+              <>
+              <PhasePreview phases={initiative.phases}
+                quarterIdx={QUARTER_IDX[initiative.quarter as Quarter] ?? NEW_STRUCTURE_FROM_QIDX} />
               <div className="rmi-phase-list">
                 {[...initiative.phases]
                   .sort((a, b) => a.startUnit - b.startUnit || a.endUnit - b.endUnit)
@@ -887,6 +952,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                     </div>
                   ))}
               </div>
+              </>
             )}
           </div>
         )}
@@ -1459,43 +1525,6 @@ function WorkstreamModal({
 // ── Sub-bar naming modal ──────────────────────────────────────────────────────
 // Shown after a draw gesture creates a new sub-bar. The user names it then confirms.
 
-// After click-dragging a new bar onto a Q4+ initiative: pick which phase it is.
-function PhaseTypeModal({
-  range,
-  onConfirm,
-  onCancel,
-}: {
-  range: string;
-  onConfirm: (type: PhaseType) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="overlay" onClick={onCancel}>
-      <div className="modal subbar-name-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-header-left">
-            <h2>Add a phase</h2>
-            <p className="modal-subtitle">{range}</p>
-          </div>
-          <button className="modal-close-x" onClick={onCancel} aria-label="Close">✕</button>
-        </div>
-        <div className="phase-type-options">
-          {PHASE_TYPES.map((t) => (
-            <button key={t} className="phase-type-option" onClick={() => onConfirm(t)}>
-              <span className="rmi-phase-swatch" style={{ background: PHASE_STYLE[t].background, borderColor: PHASE_STYLE[t].border }} />
-              {PHASE_LABELS[t]}
-            </button>
-          ))}
-        </div>
-        <div className="modal-actions">
-          <div style={{ flex: 1 }} />
-          <button className="btn btn-soft" onClick={onCancel}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SubBarNameModal({
   onConfirm,
   onCancel,
@@ -1646,10 +1675,14 @@ function GanttRow({
   dragHandleProps,
   phaseMode = false,
   goalChip,
+  barTag,
 }: {
-  // Draw the initiative as its phases (Q4 2026 onwards) instead of a main bar
-  // plus workstreams.
+  // Draw the initiative as one bar split by its phases (Q4 2026 onwards) instead
+  // of a main bar plus workstreams. Phases are edited in the initiative form, so
+  // the bar can't be dragged, resized or drawn on.
   phaseMode?: boolean;
+  // Small tag before the name in the bar's label pill (delivery team, By goal view).
+  barTag?: string;
   // Small goal chip in the label cell (By team view).
   goalChip?: { label: string; color: string; light: string; title: string };
   initiative: RoadmapInitiative;
@@ -1703,11 +1736,8 @@ function GanttRow({
     if (movingSubBarId   === sb.id && movePreview)   return { ...sb, startUnit: movePreview.start,   endUnit: movePreview.end };
     return sb;
   });
-  const resolvedPhases = (phaseMode ? initiative.phases || [] : []).map((ph) => {
-    if (resizingSubBarId === ph.id && resizePreview) return { ...ph, startUnit: resizePreview.start, endUnit: resizePreview.end };
-    if (movingSubBarId   === ph.id && movePreview)   return { ...ph, startUnit: movePreview.start,   endUnit: movePreview.end };
-    return ph;
-  });
+  const phases = phaseMode ? initiative.phases || [] : [];
+  const phaseSpan = phasesSpan(phases);
 
   // Bar height / vertical position helpers.
   // One lane (no overlaps): use CSS defaults (top:7px bottom:7px via .gantt-bar).
@@ -1716,11 +1746,8 @@ function GanttRow({
   // actually overlap another bar; non-overlapping bars share a lane.
   const ROW_H = 56;       // matches .gantt-row height in CSS
   const BAR_INSET = 7;    // matches .gantt-bar top/bottom in CSS
-  // Phases stack into thinner lanes than workstreams.
-  const PHASE_LANE_H = 30;
-  const PHASE_BAR_H = 26;
-  const laneTopForIdx = (idx: number) => phaseMode ? BAR_INSET + idx * PHASE_LANE_H : idx * ROW_H + BAR_INSET;
-  const laneBarHeight = phaseMode ? PHASE_BAR_H : ROW_H - BAR_INSET * 2;
+  const laneTopForIdx = (idx: number) => idx * ROW_H + BAR_INSET;
+  const laneBarHeight = ROW_H - BAR_INSET * 2;
 
   // Greedy interval packing: place every bar (primary + sub-bars, ordered by start
   // date) into the first lane whose previous bar ends at/before this one's start.
@@ -1731,7 +1758,6 @@ function GanttRow({
   for (const sb of resolvedSubBars) {
     if (sb.startUnit != null && sb.endUnit != null) placedLanes.push({ key: sb.id, start: sb.startUnit, end: sb.endUnit });
   }
-  for (const ph of resolvedPhases) placedLanes.push({ key: ph.id, start: ph.startUnit, end: ph.endUnit });
   placedLanes.sort((a, b) => a.start - b.start || a.end - b.end);
 
   const laneEnds: number[] = []; // end unit of the last bar placed in each lane
@@ -1758,14 +1784,13 @@ function GanttRow({
   const usedLaneCount = Math.max(laneEnds.length, drawGhost ? ghostLane + 1 : 0);
   // Only grow the row / switch to lane positioning when more than one lane is used.
   const showTall = usedLaneCount > 1;
-  const stackedRowHeight = phaseMode
-    ? Math.max(ROW_H, BAR_INSET * 2 + usedLaneCount * PHASE_LANE_H - (PHASE_LANE_H - PHASE_BAR_H))
-    : usedLaneCount * ROW_H;
+  const stackedRowHeight = usedLaneCount * ROW_H;
 
   const bar   = primarySpan ? clipSpan(primarySpan) : null;
   const ghost = drawGhost   ? clipSpan(drawGhost)   : null;
-  // Phase mode, no phases yet: a dashed outline across the initiative's span.
-  const placeholder = phaseMode && resolvedPhases.length === 0
+  // Phase mode: one bar across all phases, or a dashed outline when there are none.
+  const phaseBar = phaseSpan ? clipSpan(phaseSpan) : null;
+  const placeholder = phaseMode && !phaseSpan
     ? clipSpan(spanUnitsOf(initiative) ?? { start: windowStartUnit, end: windowEndUnit })
     : null;
 
@@ -1791,22 +1816,6 @@ function GanttRow({
     };
   }
 
-  function phaseStyle(type: PhaseType, isStacked: boolean, stackIdx: number, clipped: { clipLeft: boolean; clipRight: boolean }) {
-    const ps = PHASE_STYLE[type];
-    const edge = `1.5px solid ${ps.border}`;
-    return {
-      background: ps.background,
-      borderTop: edge,
-      borderBottom: edge,
-      borderLeft: clipped.clipLeft ? "none" : edge,
-      borderRight: clipped.clipRight ? "none" : edge,
-      borderTopLeftRadius:     clipped.clipLeft  ? 0 : 5,
-      borderBottomLeftRadius:  clipped.clipLeft  ? 0 : 5,
-      borderTopRightRadius:    clipped.clipRight ? 0 : 5,
-      borderBottomRightRadius: clipped.clipRight ? 0 : 5,
-      ...(isStacked ? { top: laneTopForIdx(stackIdx), bottom: "auto" as const, height: laneBarHeight } : {}),
-    };
-  }
 
   return (
     <div
@@ -1838,9 +1847,9 @@ function GanttRow({
 
       {/* Month track */}
       <div
-        className={`gantt-track-grid gantt-track-overlay${!readOnly ? " gantt-track-drawable" : ""}`}
+        className={`gantt-track-grid gantt-track-overlay${!readOnly && !phaseMode ? " gantt-track-drawable" : ""}`}
         style={{ gridTemplateColumns: `repeat(${months.length}, var(--gantt-col-w))` }}
-        onPointerDown={readOnly ? undefined : (e) => onTrackPointerDown(e, initiative.id)}
+        onPointerDown={readOnly || phaseMode ? undefined : (e) => onTrackPointerDown(e, initiative.id)}
       >
         {months.map((col) => (
           <div key={`${col.year}-${col.monthIdx}`}
@@ -1906,34 +1915,35 @@ function GanttRow({
           );
         })}
 
-        {/* Phases (Q4 2026 onwards). Clicking one opens the initiative. */}
-        {resolvedPhases.map((ph) => {
-          const phBar = clipSpan({ start: ph.startUnit, end: ph.endUnit });
-          if (!phBar) return null;
-          const stackIdx = laneIdxByKey.get(ph.id) ?? 0;
-          const style = { left: `${phBar.leftPct}%`, width: `${phBar.widthPct}%`, ...phaseStyle(ph.type, showTall, stackIdx, phBar) };
-          return (
-            <div key={ph.id} className="gantt-bar gantt-phase-bar" style={style} title={phaseRangeLabel(ph)}
-              onClick={(e) => { e.stopPropagation(); onOpen(null); }}>
-              {!readOnly && !phBar.clipLeft && (
-                <div className="gantt-resize-handle gantt-resize-left"
-                  onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "left", ph.id); }} />
-              )}
-              {!readOnly && (
-                <div className="gantt-bar-move-handle"
-                  onPointerDown={(e) => { e.stopPropagation(); onBarMoveStart(e, initiative.id, ph.id); }}
-                  title="Drag to move" />
-              )}
-              <span className="gantt-phase-label" style={{ color: PHASE_STYLE[ph.type].color }}>
-                {PHASE_LABELS[ph.type]}
+        {/* Q4 2026 onwards: one bar per initiative, split by its phases. Clicking
+            it opens the initiative, where the phases are edited. */}
+        {phaseBar && phaseSpan && (
+          <div
+            className="gantt-bar gantt-phase-bar"
+            style={{
+              left: `${phaseBar.leftPct}%`,
+              width: `${phaseBar.widthPct}%`,
+              borderTopLeftRadius: phaseBar.clipLeft ? 0 : 5,
+              borderBottomLeftRadius: phaseBar.clipLeft ? 0 : 5,
+              borderTopRightRadius: phaseBar.clipRight ? 0 : 5,
+              borderBottomRightRadius: phaseBar.clipRight ? 0 : 5,
+            }}
+            title={phasesTooltip(initiative.name, phases)}
+            onClick={(e) => { e.stopPropagation(); onOpen(null); }}
+          >
+            <PhaseSegments
+              phases={phases}
+              from={Math.max(phaseSpan.start, windowStartUnit)}
+              to={Math.min(phaseSpan.end, windowEndUnit)}
+            />
+            <span className="gantt-phase-pill-wrap">
+              <span className="gantt-phase-pill">
+                {barTag && <span className="gantt-phase-tag">{barTag}</span>}
+                {initiative.name}
               </span>
-              {!readOnly && !phBar.clipRight && (
-                <div className="gantt-resize-handle gantt-resize-right"
-                  onPointerDown={(e) => { e.stopPropagation(); onResizeStart(e, initiative.id, "right", ph.id); }} />
-              )}
-            </div>
-          );
-        })}
+            </span>
+          </div>
+        )}
 
         {placeholder && (
           <div className="gantt-phase-placeholder" title="No phases yet"
@@ -2027,13 +2037,6 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   } | null>(null);
   // After a draw completes we show a small naming modal for the new sub-bar.
   const [pendingSubBar, setPendingSubBar] = useState<{
-    initiativeId: string;
-    startUnit: number;
-    endUnit: number;
-  } | null>(null);
-
-  // After a draw on a Q4+ initiative we ask which phase the new bar is.
-  const [pendingPhase, setPendingPhase] = useState<{
     initiativeId: string;
     startUnit: number;
     endUnit: number;
@@ -2283,15 +2286,12 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     const item = items.find((x) => x.id === id);
     if (!item) return;
 
-    // Resolve the span for the primary bar, a sub-bar or a phase.
+    // Resolve the span for either the primary bar or a sub-bar.
     let stored: { start: number; end: number } | null = null;
     if (subBarId) {
       const sb = (item.subBars || []).find((x) => x.id === subBarId);
-      const ph = (item.phases || []).find((x) => x.id === subBarId);
       if (sb && sb.startUnit != null && sb.endUnit != null) {
         stored = { start: sb.startUnit, end: sb.endUnit };
-      } else if (ph) {
-        stored = { start: ph.startUnit, end: ph.endUnit };
       }
     } else {
       stored = spanUnitsOf(item);
@@ -2389,10 +2389,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     if (!item) return;
 
     let originalStart: number, originalEnd: number;
-    const movingPhase = subBarId ? (item.phases || []).find((x) => x.id === subBarId) : undefined;
-    if (movingPhase) {
-      originalStart = movingPhase.startUnit; originalEnd = movingPhase.endUnit;
-    } else if (subBarId) {
+    if (subBarId) {
       const sb = (item.subBars || []).find((x) => x.id === subBarId);
       if (!sb || sb.startUnit == null || sb.endUnit == null) return;
       originalStart = sb.startUnit; originalEnd = sb.endUnit;
@@ -2523,36 +2520,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     }
   }
 
-  // Persist a phase's new span, keeping the initiative's derived span/quarters in step.
-  async function onPhaseSpanChange(id: string, phaseId: string, startUnit: number, endUnit: number) {
-    const item = items.find((x) => x.id === id);
-    if (!item) return;
-    const phases = (item.phases || []).map((p) => (p.id === phaseId ? { ...p, startUnit, endUnit } : p));
-    await patchPhases(id, phases);
-  }
-
-  async function patchPhases(id: string, phases: RoadmapPhase[]) {
-    const patch = derivedFromPhases(phases);
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
-    try {
-      const res = await fetch(`/api/roadmap-initiatives/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
-      setItems((prev) => prev.map((x) => (x.id === id ? data.initiative : x)));
-    } catch (e: unknown) {
-      flash(e instanceof Error ? e.message : "Update failed", true);
-    }
-  }
-
-  // Used for workstreams and phases alike (both are "sub" bars of the row).
   async function onSubBarSpanChange(id: string, subBarId: string, startUnit: number, endUnit: number) {
-    if ((items.find((x) => x.id === id)?.phases || []).some((p) => p.id === subBarId)) {
-      return onPhaseSpanChange(id, subBarId, startUnit, endUnit);
-    }
     setItems((prev) => prev.map((x) => {
       if (x.id !== id) return x;
       const subBars = (x.subBars || []).map((sb) =>
@@ -2638,19 +2606,13 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
         if (item) {
           const hasPrimary = spanUnitsOf(item) != null;
           const hasSub = (item.subBars || []).some((sb) => sb.startUnit != null);
-          if (hasPrimary || hasSub || usesNewStructure(item)) setModal(item);
+          if (hasPrimary || hasSub) setModal(item);
         }
         return;
       }
 
-      const item = items.find((x) => x.id === id);
-      // Q4 2026 onwards a drawn bar is a new phase: ask which one.
-      if (item && usesNewStructure(item)) {
-        setPendingPhase({ initiativeId: id, startUnit: start, endUnit: finalEnd });
-        return;
-      }
-
       // Dragged — check if the initiative already has a primary bar.
+      const item = items.find((x) => x.id === id);
       const hasPrimary = item ? spanUnitsOf(item) != null : false;
 
       if (!hasPrimary) {
@@ -3018,7 +2980,11 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
         )}
 
         {!readOnly && !mobile && (
-          <span className="gantt-hint">Click cells to place · drag ▐ handle to resize · drag ⠿ to reorder</span>
+          <span className="gantt-hint">
+            {newStructure
+              ? `Click a bar to edit its phases${teamLayout ? "" : " · drag ⠿ to reorder"}`
+              : "Click cells to place · drag ▐ handle to resize · drag ⠿ to reorder"}
+          </span>
         )}
       </div>
 
@@ -3098,25 +3064,25 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                           ) : null;
                         })()}
                       </div>
-                      {/* Phases across the quarter, as a compact strip */}
-                      {newStructure && (item.phases || []).length > 0 && (
-                        <div className="rml-phase-strip" aria-hidden>
-                          {item.phases.map((ph) => {
-                            const s0 = Math.max(ph.startUnit, windowStartUnit);
-                            const e0 = Math.min(ph.endUnit, windowEndUnit);
-                            if (e0 <= s0) return null;
-                            const ws = windowEndUnit - windowStartUnit;
-                            return (
-                              <span key={ph.id} title={phaseRangeLabel(ph)} style={{
-                                left: `${((s0 - windowStartUnit) / ws) * 100}%`,
-                                width: `${((e0 - s0) / ws) * 100}%`,
-                                background: PHASE_STYLE[ph.type].background,
-                                borderColor: PHASE_STYLE[ph.type].border,
-                              }} />
-                            );
-                          })}
-                        </div>
-                      )}
+                      {/* The initiative's bar across the quarter, split by phase */}
+                      {newStructure && (() => {
+                        const span = phasesSpan(item.phases || []);
+                        if (!span) return null;
+                        const from = Math.max(span.start, windowStartUnit);
+                        const to = Math.min(span.end, windowEndUnit);
+                        if (to <= from) return null;
+                        const ws = windowEndUnit - windowStartUnit;
+                        return (
+                          <div className="rml-phase-strip" title={phasesTooltip(item.name, item.phases)}>
+                            <div className="rml-phase-strip-bar" style={{
+                              left: `${((from - windowStartUnit) / ws) * 100}%`,
+                              width: `${((to - from) / ws) * 100}%`,
+                            }}>
+                              <PhaseSegments phases={item.phases} from={from} to={to} />
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </button>
                   );
                 })}
@@ -3297,6 +3263,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                                   dragHandleProps={teamLayout ? undefined : drag.dragHandleProps ?? undefined}
                                   phaseMode={newStructure}
                                   goalChip={teamLayout ? goalChipFor(item) : undefined}
+                                  barTag={newStructure && !teamLayout ? item.deliveryTeam || undefined : undefined}
                                 />
                               </div>
                             )}
@@ -3380,20 +3347,6 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
           initiatives={itemsByGroup[strategyModal.id] ?? []}
           onClose={() => setStrategyModal(null)}
           onOpenInitiative={(i) => { setStrategyModal(null); setModal(i); }}
-        />
-      )}
-
-      {pendingPhase && (
-        <PhaseTypeModal
-          range={unitRangeLabel(pendingPhase.startUnit, pendingPhase.endUnit)}
-          onCancel={() => setPendingPhase(null)}
-          onConfirm={(type) => {
-            const { initiativeId, startUnit, endUnit } = pendingPhase;
-            setPendingPhase(null);
-            const item = items.find((x) => x.id === initiativeId);
-            if (!item) return;
-            patchPhases(initiativeId, [...(item.phases || []), { id: newPhaseId(), type, startUnit, endUnit }]);
-          }}
         />
       )}
 

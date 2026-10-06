@@ -3815,18 +3815,53 @@ a.link:hover { text-decoration: underline; }
 @media (max-width: 600px) { .gantt-root { --gantt-label-w: 140px; } }
 .gantt-table { position: relative; }
 
-/* Phase bars */
-.gantt-phase-bar { justify-content: flex-start; overflow: hidden; }
-.gantt-phase-label {
-  font-size: 10.5px;
+/* One bar per initiative, split into phase segments (as in the Q4 prototype) */
+.gantt-phase-bar { overflow: hidden; }
+.phase-segs { position: absolute; inset: 0; display: flex; }
+.phase-seg {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.phase-seg-gap {
+  border-top: 1.5px dashed #cbd5e1;
+  border-bottom: 1.5px dashed #cbd5e1;
+}
+.phase-stripe { flex: 1 1 0; min-height: 0; border: 0 solid; box-sizing: border-box; }
+.phase-stripe.phase-testing { border-width: 1.5px; }
+.gantt-phase-pill-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  pointer-events: none;
+  min-width: 0;
+}
+.gantt-phase-pill {
+  background: #fff;
+  color: var(--ink);
+  font-size: 11.5px;
   font-weight: 700;
-  padding: 0 8px;
+  line-height: 1.2;
+  border-radius: 4px;
+  padding: 3px 7px;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  pointer-events: none;
-  position: relative;
-  z-index: 1;
+  max-width: 100%;
+}
+.gantt-phase-tag {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-right: 5px;
 }
 .gantt-phase-placeholder {
   position: absolute;
@@ -3910,40 +3945,21 @@ a.link:hover { text-decoration: underline; }
   .rmi-phase-row .rmi-phase-to { display: none; }
 }
 
-/* Phase picker after drawing a bar */
-.phase-type-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 16px 24px 20px; }
-.phase-type-option {
-  font: inherit;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--panel);
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ink);
-  cursor: pointer;
-}
-.phase-type-option:hover { background: #f8fafc; }
-
 /* Mobile cards: phases as a compact strip across the quarter */
 .rml-phase-strip {
   position: relative;
-  height: 8px;
+  height: 10px;
   margin-top: 8px;
   border-radius: 999px;
   background: #f1f5f9;
   overflow: hidden;
 }
-.rml-phase-strip span {
+.rml-phase-strip-bar {
   position: absolute;
   top: 0;
   bottom: 0;
-  border: 1px solid;
   border-radius: 999px;
-  box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Milestones: markers on the month header, lines down the table */
@@ -3977,4 +3993,33 @@ a.link:hover { text-decoration: underline; }
   bottom: 0;
   border-left: 2px dashed var(--ink);
   opacity: 0.35;
+}
+
+/* Initiative form / detail: preview of the single phase bar across the quarter */
+.rmi-phase-help { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+.rmi-phase-preview { margin-bottom: 12px; }
+.rmi-phase-preview-track {
+  position: relative;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background:
+    linear-gradient(to right, transparent calc(33.333% - 0.5px), var(--line) calc(33.333% - 0.5px), var(--line) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+    linear-gradient(to right, transparent calc(66.666% - 0.5px), var(--line) calc(66.666% - 0.5px), var(--line) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
+    #f8fafc;
+}
+.rmi-phase-preview-bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.rmi-phase-preview-months {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 3px;
 }
