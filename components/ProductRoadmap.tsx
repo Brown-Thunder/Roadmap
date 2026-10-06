@@ -1576,6 +1576,77 @@ function SubBarNameModal({
   );
 }
 
+// ── Milestone goals ──────────────────────────────────────────────────────────
+// Each milestone's Details field holds one line per target. A line may start with
+// a goal tag ("[G1]") that colours its dot, and may contain **bold** text and
+// "[proposed]" / "[at risk]" tags.
+
+function parseMilestoneLine(line: string): { goal?: CompanyGoal["id"]; text: string } {
+  const m = line.match(/^\s*\[G([123])\]\s*/);
+  return m
+    ? { goal: m[1] as CompanyGoal["id"], text: line.slice(m[0].length) }
+    : { text: line.trim() };
+}
+
+function MilestoneText({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*|\[(?:proposed|at risk)\])/g).filter(Boolean);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**")) return <b key={i}>{part.slice(2, -2)}</b>;
+        if (part === "[proposed]" || part === "[at risk]") {
+          return <span key={i} className={`ms-tag${part === "[at risk]" ? " ms-tag-risk" : ""}`}>{part.slice(1, -1)}</span>;
+        }
+        return <Fragment key={i}>{part}</Fragment>;
+      })}
+    </>
+  );
+}
+
+function MilestoneCards({ milestones, highlightId }: { milestones: RoadmapMilestone[]; highlightId: string | null }) {
+  const hasTags = milestones.some((m) => /\[(proposed|at risk)\]/.test(m.details));
+  return (
+    <section className="ms-section" aria-labelledby="ms-heading">
+      <div className="ms-section-head">
+        <h2 id="ms-heading" className="ms-section-title">Milestone goals</h2>
+        {hasTags && (
+          <span className="ms-section-note">
+            Targets marked <span className="ms-tag">proposed</span> are still to be agreed.
+          </span>
+        )}
+      </div>
+      <div className="ms-grid">
+        {milestones.map((m) => {
+          const lines = m.details.split("\n").map((l) => l.trim()).filter(Boolean).map(parseMilestoneLine);
+          return (
+            <article key={m.id} id={`milestone-${m.id}`}
+              className={`ms-card${highlightId === m.id ? " ms-card-flash" : ""}`}>
+              <div className="ms-card-top">
+                <span className="ms-code">{m.code}</span>
+                <span className="ms-date">
+                  {m.dateLabel ? `${m.dateLabel} · ` : ""}end of {unitToDateLabel(m.unit - 1)}
+                </span>
+              </div>
+              <h3 className="ms-card-title">{m.name}</h3>
+              {lines.length > 0 && (
+                <ul className="ms-list">
+                  {lines.map((l, i) => (
+                    <li key={i}>
+                      <span className="ms-dot" style={{ background: l.goal ? GOAL_META[l.goal].color : "#94a3b8" }}
+                        title={l.goal ? COMPANY_GOALS.find((g) => g.id === l.goal)?.name : undefined} />
+                      <span><MilestoneText text={l.text} /></span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // ── Strategy detail modal ─────────────────────────────────────────────────────
 // Opened by clicking a strategy header (Q4 2026 onwards). Shows why the strategy
 // matters, how we'll measure it, and its initiatives in the quarter being viewed.
@@ -2005,6 +2076,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
   }
   // Milestone markers (M1–M4), drawn across both Q4+ views.
   const [milestones, setMilestones] = useState<RoadmapMilestone[]>([]);
+  const [flashMilestone, setFlashMilestone] = useState<string | null>(null);
   useEffect(() => {
     fetch("/api/roadmap-milestones", { cache: "no-store" })
       .then((r) => r.json())
@@ -2800,6 +2872,12 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     : [];
   const milestoneLeftPct = (m: RoadmapMilestone) =>
     ((m.unit - windowStartUnit) / (windowEndUnit - windowStartUnit)) * 100;
+  // Clicking a timeline marker scrolls to its card and briefly highlights it.
+  function showMilestone(id: string) {
+    document.getElementById(`milestone-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFlashMilestone(id);
+    setTimeout(() => setFlashMilestone((cur) => (cur === id ? null : cur)), 1600);
+  }
   const milestoneTitle = (m: RoadmapMilestone) =>
     `${m.code} · ${m.name} — ${m.dateLabel ? `${m.dateLabel}, ` : ""}end of ${unitToDateLabel(m.unit - 1)}`;
 
@@ -3158,10 +3236,11 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                 })}
                 {/* Milestone markers (Q4 2026 onwards) */}
                 {visibleMilestones.map((m) => (
-                  <span key={m.id} className="gantt-ms-marker" style={{ left: `${milestoneLeftPct(m)}%` }}
-                    title={milestoneTitle(m)} tabIndex={0} aria-label={milestoneTitle(m)}>
+                  <button key={m.id} type="button" className="gantt-ms-marker" style={{ left: `${milestoneLeftPct(m)}%` }}
+                    title={`${milestoneTitle(m)} — click for details`} aria-label={milestoneTitle(m)}
+                    onClick={() => showMilestone(m.id)}>
                     {m.code}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -3301,6 +3380,11 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
             )}
           </div>
         </DragDropContext>
+      )}
+
+      {/* Milestone goals for the quarter (Q4 2026 onwards) */}
+      {visibleMilestones.length > 0 && (
+        <MilestoneCards milestones={visibleMilestones} highlightId={flashMilestone} />
       )}
       </>
       )}
