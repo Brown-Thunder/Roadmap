@@ -26,7 +26,9 @@
 //  Comments        (Long text)          — JSON array of RoadmapComment
 //  Order           (Number)             — sort order within swimlane
 //  Strategy        (Single line text)   — ROADMAP_STRATEGIES id, e.g. C1 (Q4 2026 onwards)
-//  Frontend %      (Number)             — share of the work that is frontend (0–100)
+//  Phases          (Long text)          — JSON array of RoadmapPhase (Q4 2026 onwards)
+//  Delivery Team   (Single select)      — Web | App | Backend (Q4 2026 onwards)
+//  Frontend %      (Number)             — retired; no longer read or written
 // ─────────────────────────────────────────────────────────────────────────────
 
 const API_BASE = "https://api.airtable.com/v0";
@@ -173,6 +175,30 @@ export const STRATEGY_BY_ID: Record<string, RoadmapStrategy> = Object.fromEntrie
   ROADMAP_STRATEGIES.map((s) => [s.id, s])
 );
 
+// ── Phases & delivery teams (Q4 2026 onwards) ────────────────────────────────
+// Each initiative's timeline is a list of phases, each with its own span. A phase
+// type can repeat (e.g. two separate Backend blocks).
+
+export const PHASE_TYPES = ["design", "backend", "frontend", "testing"] as const;
+export type PhaseType = typeof PHASE_TYPES[number];
+
+export const PHASE_LABELS: Record<PhaseType, string> = {
+  design: "Design",
+  backend: "Backend",
+  frontend: "Frontend",
+  testing: "Testing & monitoring",
+};
+
+export interface RoadmapPhase {
+  id: string;
+  type: PhaseType;
+  startUnit: number; // inclusive
+  endUnit: number;   // exclusive
+}
+
+export const DELIVERY_TEAMS = ["Web", "App", "Backend"] as const;
+export type DeliveryTeam = typeof DELIVERY_TEAMS[number];
+
 export const ROADMAP_STATUS_OPTIONS: RoadmapStatus[] = [
   "Planned",
   "In Progress",
@@ -236,8 +262,9 @@ export interface RoadmapInitiative {
   successMetrics: string;    // how we'll track success (comma-separated or prose)
   // Q4 2026 onwards: ROADMAP_STRATEGIES id this initiative serves ("" = legacy).
   strategy: string;
-  // Share of the work that is frontend, 0–100 (backend = the rest). null = not set.
-  frontendPct: number | null;
+  // Q4 2026 onwards: the initiative's phases and its lead delivery team.
+  phases: RoadmapPhase[];
+  deliveryTeam: DeliveryTeam | "";
   notes: string;
   comments: RoadmapComment[];
   order: number;
@@ -290,7 +317,11 @@ function toRoadmapInitiative(rec: any): RoadmapInitiative {
     northStarMetric: f["North Star Metric"] || "",
     successMetrics: f["Success Metrics"] || "",
     strategy: f["Strategy"] || "",
-    frontendPct: typeof f["Frontend %"] === "number" ? f["Frontend %"] : null,
+    phases: (() => {
+      try { return f["Phases"] ? JSON.parse(f["Phases"]) : []; }
+      catch { return []; }
+    })(),
+    deliveryTeam: (f["Delivery Team"] as DeliveryTeam) || "",
     notes: f["Notes"] || "",
     comments: (() => {
       try { return f["Comments"] ? JSON.parse(f["Comments"]) : []; }
@@ -322,7 +353,8 @@ function toFields(input: Partial<RoadmapInitiative>): Record<string, any> {
   if (input.northStarMetric !== undefined) f["North Star Metric"] = input.northStarMetric;
   if (input.successMetrics !== undefined) f["Success Metrics"] = input.successMetrics;
   if (input.strategy !== undefined) f["Strategy"] = input.strategy;
-  if (input.frontendPct !== undefined) f["Frontend %"] = input.frontendPct;
+  if (input.phases !== undefined) f["Phases"] = JSON.stringify(input.phases);
+  if (input.deliveryTeam !== undefined) f["Delivery Team"] = input.deliveryTeam || null;
   if (input.notes !== undefined) f["Notes"] = input.notes;
   if (input.comments !== undefined) f["Comments"] = JSON.stringify(input.comments);
   if (input.order !== undefined) f["Order"] = input.order;
@@ -394,4 +426,47 @@ export async function deleteRoadmapInitiative(id: string): Promise<void> {
   if (!res.ok) {
     throw new Error(`Airtable roadmap delete failed: ${res.status} ${await res.text()}`);
   }
+}
+
+// ── Milestones ("Roadmap Milestones" table) ──────────────────────────────────
+//  Code        (Single line text) — e.g. "M1"
+//  Name        (Single line text) — e.g. "Maps live, credit captured"
+//  Unit        (Number)           — timeline unit the marker sits at (the end of
+//                                   the milestone's week; Q4 2026 W1 starts at 12)
+//  Date Label  (Single line text) — e.g. "Fri 23 Oct"
+//  Details     (Long text)
+
+export interface RoadmapMilestone {
+  id: string;
+  code: string;
+  name: string;
+  unit: number;
+  dateLabel: string;
+  details: string;
+}
+
+export async function listRoadmapMilestones(): Promise<RoadmapMilestone[]> {
+  const { apiKey, baseId } = cfg();
+  const table = process.env.AIRTABLE_MILESTONES_TABLE || "Roadmap Milestones";
+  const url = new URL(`${API_BASE}/${baseId}/${encodeURIComponent(table)}`);
+  url.searchParams.set("pageSize", "100");
+  const res = await fetch(url.toString(), { headers: headers(apiKey), cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Airtable milestones list failed: ${res.status} ${await res.text()}`);
+  }
+  const data = await res.json();
+  return (data.records || [])
+    .map((rec: any) => {
+      const f = rec.fields || {};
+      return {
+        id: rec.id,
+        code: f["Code"] || "",
+        name: f["Name"] || "",
+        unit: typeof f["Unit"] === "number" ? f["Unit"] : NaN,
+        dateLabel: f["Date Label"] || "",
+        details: f["Details"] || "",
+      };
+    })
+    .filter((m: RoadmapMilestone) => Number.isFinite(m.unit))
+    .sort((a: RoadmapMilestone, b: RoadmapMilestone) => a.unit - b.unit);
 }
