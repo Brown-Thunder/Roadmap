@@ -175,19 +175,23 @@ function quartersForSpan(start: number, end: number): { quarter: string; endQuar
   return { quarter: clampQ(sq), endQuarter: eq > sq ? clampQ(eq) : "" };
 }
 
-// Phase colours. As in the Q4 roadmap prototype, design is hatched, build work
-// (backend / frontend) is solid and testing & monitoring is a light fill with an
-// outline, so the phases read apart even where colours are hard to tell apart.
-const PHASE_STYLE: Record<PhaseType, { color: string; background: string; border: string }> = {
-  design: {
-    color: "#6d28d9",
-    background: "repeating-linear-gradient(135deg, #8b5cf6 0 4px, #ddd6fe 4px 8px)",
-    border: "#7c3aed",
-  },
-  backend: { color: "#1d4ed8", background: "#60a5fa", border: "#3b82f6" },
-  frontend: { color: "#15803d", background: "#4ade80", border: "#22c55e" },
-  testing: { color: "#b45309", background: "#fef3c7", border: "#d97706" },
-};
+// Phase fills. As in the Q4 roadmap prototype, colour comes from the goal and the
+// phase sets the pattern: design is hatched, build work (backend and frontend) is
+// solid, and testing & monitoring is a pale tint with an outline.
+// `color` is a 6-digit hex; the 2-digit suffixes add transparency.
+function phaseFill(type: PhaseType, color: string): { background: string; border: string } {
+  switch (type) {
+    case "design":
+      return { background: `repeating-linear-gradient(135deg, ${color} 0 4px, ${color}4d 4px 8px)`, border: color };
+    case "testing":
+      return { background: `${color}24`, border: color };
+    default:
+      return { background: color, border: color };
+  }
+}
+
+// Neutral colour for the legend's phase swatches (goals carry the colour).
+const LEGEND_INK = "#64748b";
 
 // The quarter view layouts available from Q4 2026 onwards.
 type RoadmapLayout = "goal" | "team";
@@ -228,14 +232,14 @@ function phaseSegments(phases: RoadmapPhase[], from: number, to: number): { unit
 }
 
 // The coloured body of an initiative's single bar, covering [from, to).
-function PhaseSegments({ phases, from, to }: { phases: RoadmapPhase[]; from: number; to: number }) {
+function PhaseSegments({ phases, from, to, color }: { phases: RoadmapPhase[]; from: number; to: number; color: string }) {
   return (
     <div className="phase-segs" aria-hidden>
       {phaseSegments(phases, from, to).map((seg, i) => (
         <div key={i} className={`phase-seg${seg.types.length === 0 ? " phase-seg-gap" : ""}`} style={{ flexGrow: seg.units }}>
           {seg.types.map((t) => (
             <div key={t} className={`phase-stripe phase-${t}`}
-              style={{ background: PHASE_STYLE[t].background, borderColor: PHASE_STYLE[t].border }} />
+              style={{ background: phaseFill(t, color).background, borderColor: phaseFill(t, color).border }} />
           ))}
         </div>
       ))}
@@ -337,7 +341,7 @@ function shiftSpan(start: number, end: number, delta: number): { start: number; 
 
 // A small preview of an initiative's bar across one quarter, as drawn on the
 // roadmap. Used in the initiative form and detail view.
-function PhasePreview({ phases, quarterIdx }: { phases: RoadmapPhase[]; quarterIdx: number }) {
+function PhasePreview({ phases, quarterIdx, color }: { phases: RoadmapPhase[]; quarterIdx: number; color: string }) {
   const qStart = quarterToStartUnit(quarterIdx);
   const qEnd = qStart + UNITS_PER_QUARTER;
   const span = phasesSpan(phases);
@@ -353,7 +357,7 @@ function PhasePreview({ phases, quarterIdx }: { phases: RoadmapPhase[]; quarterI
             left: `${((from - qStart) / UNITS_PER_QUARTER) * 100}%`,
             width: `${((to - from) / UNITS_PER_QUARTER) * 100}%`,
           }}>
-            <PhaseSegments phases={phases} from={from} to={to} />
+            <PhaseSegments phases={phases} from={from} to={to} color={color} />
           </div>
         )}
       </div>
@@ -390,6 +394,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
   // being viewed, for a new initiative).
   const phaseQuarter = isNew ? defaultQuarter : (initiative.quarter || defaultQuarter);
   const phaseQIdx = QUARTER_IDX[phaseQuarter as Quarter] ?? NEW_STRUCTURE_FROM_QIDX;
+  const phaseColor = companyGoal ? GOAL_META[companyGoal.id].color : "#94a3b8";
   const phaseWeekUnits = Array.from({ length: UNITS_PER_QUARTER }, (_, k) => quarterToStartUnit(phaseQIdx) + k);
   const formPhases = form.phases || [];
 
@@ -675,7 +680,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
               <p className="rmi-phase-help">
                 Set how long each discipline takes. The roadmap draws them as one bar, split by phase.
               </p>
-              {formPhases.length > 0 && <PhasePreview phases={formPhases} quarterIdx={phaseQIdx} />}
+              {formPhases.length > 0 && <PhasePreview phases={formPhases} quarterIdx={phaseQIdx} color={phaseColor} />}
               {formPhases.length === 0 && (
                 <div className="rmi-ws-empty">No phases yet. Add the design, backend, frontend and testing work, week by week.</div>
               )}
@@ -687,7 +692,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                 if (!endOpts.includes(p.endUnit)) endOpts.push(p.endUnit);
                 return (
                   <div key={p.id} className="rmi-phase-row">
-                    <span className="rmi-phase-swatch" style={{ background: PHASE_STYLE[p.type].background, borderColor: PHASE_STYLE[p.type].border }} />
+                    <span className="rmi-phase-swatch" style={{ background: phaseFill(p.type, phaseColor).background, borderColor: phaseFill(p.type, phaseColor).border }} />
                     <select className="select" value={p.type} aria-label="Phase"
                       onChange={(e) => updatePhase(p.id, { type: e.target.value as PhaseType })}>
                       {PHASE_TYPES.map((t) => <option key={t} value={t}>{PHASE_LABELS[t]}</option>)}
@@ -939,14 +944,14 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
               <div className="rmi-ws-empty">No phases yet.{!readOnly && " Click Edit to add them."}</div>
             ) : (
               <>
-              <PhasePreview phases={initiative.phases}
+              <PhasePreview phases={initiative.phases} color={goalColor(initiative)}
                 quarterIdx={QUARTER_IDX[initiative.quarter as Quarter] ?? NEW_STRUCTURE_FROM_QIDX} />
               <div className="rmi-phase-list">
                 {[...initiative.phases]
                   .sort((a, b) => a.startUnit - b.startUnit || a.endUnit - b.endUnit)
                   .map((p) => (
                     <div key={p.id} className="rmi-phase-item">
-                      <span className="rmi-phase-swatch" style={{ background: PHASE_STYLE[p.type].background, borderColor: PHASE_STYLE[p.type].border }} />
+                      <span className="rmi-phase-swatch" style={{ background: phaseFill(p.type, goalColor(initiative)).background, borderColor: phaseFill(p.type, goalColor(initiative)).border }} />
                       <span className="rmi-phase-name">{PHASE_LABELS[p.type]}</span>
                       <span className="rmi-phase-range">{unitRangeLabel(p.startUnit, p.endUnit)}</span>
                     </div>
@@ -1933,6 +1938,7 @@ function GanttRow({
           >
             <PhaseSegments
               phases={phases}
+              color={gc}
               from={Math.max(phaseSpan.start, windowStartUnit)}
               to={Math.min(phaseSpan.end, windowEndUnit)}
             />
@@ -2969,11 +2975,17 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
         )}
 
         {newStructure && (
-          <span className="rm-phase-legend" aria-label="Phases">
-            {PHASE_TYPES.map((t) => (
+          <span className="rm-phase-legend" aria-label="Legend">
+            {(["design", "frontend", "testing"] as const).map((t) => (
               <span key={t}>
-                <i style={{ background: PHASE_STYLE[t].background, borderColor: PHASE_STYLE[t].border }} />
-                {PHASE_LABELS[t]}
+                <i style={{ background: phaseFill(t, LEGEND_INK).background, borderColor: phaseFill(t, LEGEND_INK).border }} />
+                {t === "frontend" ? "Build (backend / frontend)" : PHASE_LABELS[t]}
+              </span>
+            ))}
+            {COMPANY_GOALS.map((g) => (
+              <span key={g.id}>
+                <b className="rm-legend-dot" style={{ background: GOAL_META[g.id].color }} />
+                {g.name}
               </span>
             ))}
           </span>
@@ -3078,7 +3090,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                               left: `${((from - windowStartUnit) / ws) * 100}%`,
                               width: `${((to - from) / ws) * 100}%`,
                             }}>
-                              <PhaseSegments phases={item.phases} from={from} to={to} />
+                              <PhaseSegments phases={item.phases} from={from} to={to} color={goalColor(item)} />
                             </div>
                           </div>
                         );

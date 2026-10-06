@@ -4023,3 +4023,9 @@ a.link:hover { text-decoration: underline; }
   text-align: center;
   margin-top: 3px;
 }
+.rm-legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
