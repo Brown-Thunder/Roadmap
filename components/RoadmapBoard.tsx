@@ -34,6 +34,8 @@ import UserMenu from "./UserMenu";
 import type { GithubIssue } from "@/lib/github";
 import type { BoardConfig } from "@/lib/boardConfig";
 import { DEFAULT_BOARD_CONFIG } from "@/lib/boardConfig";
+import { BRAND, TOKENS } from "@/lib/brand";
+import { Edit02, RefreshCw01, XClose } from "@untitledui/icons";
 
 function getMondayOf(d: Date): Date {
   const day = d.getDay();
@@ -83,9 +85,10 @@ const TF_INDEX: Record<Timeframe, number> = {
 
 // Status pill colours — bg / fg / border. Green = todo/released/done,
 // amber = in-flight/review/QA/merge, purple = backlog.
-const GREEN_PILL  = { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0" };
-const AMBER_PILL  = { bg: "#fff7ed", fg: "#c2410c", border: "#fed7aa" };
-const PURPLE_PILL = { bg: "#f5f3ff", fg: "#6d28d9", border: "#ddd6fe" };
+// Brand status tokens: success / warning, and neutral for backlog.
+const GREEN_PILL  = { bg: TOKENS.successSoft, fg: TOKENS.successText, border: TOKENS.successBorder };
+const AMBER_PILL  = { bg: TOKENS.warningSoft, fg: TOKENS.warningText, border: TOKENS.warningBorder };
+const PURPLE_PILL = { bg: TOKENS.bgEmphasis,  fg: TOKENS.textBody,    border: BRAND.gray[200] };
 const STATUS_PILL: Record<string, { bg: string; fg: string; border: string }> = {
   Backlog:                  PURPLE_PILL,
   "To Do":                  GREEN_PILL,
@@ -148,7 +151,7 @@ function DepArrows({
       const dx = Math.abs(x2 - x1) * 0.4 + 30;
       const path = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
       const highlighted = hoveredId !== null && traceChain.has(it.id) && traceChain.has(blockerId);
-      const color = highlighted ? "#6366f1" : "#94a3b8";
+      const color = highlighted ? TOKENS.interactive : TOKENS.textTertiary;
       const opacity = showAll && hoveredId !== null && !highlighted ? 0.2 : 0.7;
 
       arrows.push(
@@ -188,7 +191,7 @@ function DepArrows({
     >
       <defs>
         <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <polygon points="0 0, 7 3.5, 0 7" fill="#6366f1" />
+          <polygon points="0 0, 7 3.5, 0 7" fill={TOKENS.interactive} />
         </marker>
       </defs>
       {arrows}
@@ -421,7 +424,7 @@ const RoadmapBoard = forwardRef<
   async function capturePng(): Promise<string> {
     if (!snapshotRef.current) throw new Error("Nothing to capture");
     return toPng(snapshotRef.current, {
-      backgroundColor: "#ffffff",
+      backgroundColor: TOKENS.bgSurface,
       pixelRatio: 2,
       cacheBust: true,
       // Omit edit-only chrome so the Slack image matches the read-only board.
@@ -876,7 +879,7 @@ const RoadmapBoard = forwardRef<
         onDragEnd={!readOnly ? () => { setDraggingArea(null); setDragOverArea(null); setAreaDragArmed(null); } : undefined}
         style={{
           opacity: draggingArea === g.area ? 0.4 : 1,
-          outline: dragOverArea === g.area ? "2px solid #6366f1" : undefined,
+          outline: dragOverArea === g.area ? `2px solid ${TOKENS.interactive}` : undefined,
           outlineOffset: dragOverArea === g.area ? "-2px" : undefined,
           transition: "opacity 0.15s",
         }}
@@ -959,7 +962,7 @@ const RoadmapBoard = forwardRef<
                             className="lane-rename-btn"
                             title="Rename"
                             onClick={(e) => { e.stopPropagation(); startRename(g.area, lane.key, lane.label); }}
-                          >✎</button>
+                          ><Edit02 size={16} aria-hidden /></button>
                         )}
                       </>
                     )}
@@ -988,7 +991,7 @@ const RoadmapBoard = forwardRef<
                         className="lane-rename-btn"
                         title="Rename"
                         onClick={(e) => { e.stopPropagation(); startRename(g.area, lane.key, lane.label); }}
-                      >✎</button>
+                      ><Edit02 size={16} aria-hidden /></button>
                     )}
                   </>
                 )}
@@ -1116,13 +1119,9 @@ const RoadmapBoard = forwardRef<
             </div>
           ) : (
           <div className="brand-lockup">
-            <svg className="brand-icon" width="30" height="26" viewBox="0 0 122 104" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M105.793 26.3962H86.4293C85.253 13.2727 74.1686 2.95496 60.7769 2.95496C47.34 2.95496 36.3009 13.2727 35.1246 26.3962H15.7609C8.97452 26.3962 3.45496 31.9171 3.45496 38.7051V88.529C3.45496 95.3169 8.97452 100.838 15.7609 100.838H105.838C112.625 100.838 118.144 95.3169 118.144 88.529V38.7051C118.144 31.9171 112.579 26.3962 105.793 26.3962ZM49.8283 31.8266C51.1856 36.6234 55.5741 40.1079 60.7769 40.1079C65.9798 40.1079 70.3683 36.5782 71.7256 31.8266H80.8645C79.281 41.194 70.685 49.7016 61.6365 58.6618C61.3651 58.9333 61.0484 59.2048 60.7769 59.5216C60.5055 59.2501 60.1888 58.9785 59.9173 58.6618C50.8689 49.7016 42.2728 41.194 40.6894 31.8266H49.8283ZM54.8502 28.7493C54.8502 25.4911 57.5195 22.8212 60.7769 22.8212C64.0344 22.8212 66.7037 25.4911 66.7037 28.7493C66.7037 32.0076 64.0344 34.6775 60.7769 34.6775C57.5195 34.6775 54.8502 32.0076 54.8502 28.7493ZM56.117 62.5083C57.0218 63.4134 57.9719 64.3184 58.8768 65.2687C59.3744 65.7665 60.0983 66.0833 60.7769 66.0833C61.4556 66.0833 62.1795 65.8118 62.6771 65.2687C63.582 64.3637 64.532 63.4134 65.4369 62.5083C75.3902 52.6431 84.8458 43.2304 86.3388 31.8266H95.2968V95.4527H26.2571V31.8266H35.215C36.6628 43.2756 46.1184 52.6431 56.117 62.5083ZM60.7769 8.4306C71.1827 8.4306 79.8239 16.3047 80.955 26.4414H71.8613C70.7755 21.2825 66.206 17.436 60.7317 17.436C55.2574 17.436 50.6879 21.2825 49.6021 26.4414H40.5084C41.7299 16.3047 50.3712 8.4306 60.7769 8.4306ZM8.8388 88.5742V38.7051C8.8388 34.9038 11.9153 31.8266 15.7156 31.8266H20.828V95.4527H15.7156C11.9605 95.4527 8.8388 92.3755 8.8388 88.5742ZM112.715 88.5742C112.715 92.3755 109.639 95.4527 105.838 95.4527H100.726V31.8266H105.838C109.639 31.8266 112.715 34.9038 112.715 38.7051V88.5742Z" fill="#102A56"/>
-            </svg>
+            <img className="brand-icon" src="/brand/stasher-logo-icon-blue.svg" alt="Stasher" width={32} height={29} />
             <div className="brand-text">
               <div className="brand-titles">
-                <span className="brand-wordmark">Stasher</span>
-                <span className="brand-divider" />
                 <span className="brand-product">Pulse</span>
                 {readOnly && <span className="readonly-badge">View only</span>}
               </div>
@@ -1148,7 +1147,7 @@ const RoadmapBoard = forwardRef<
               title="Refresh data from Airtable"
               aria-label="Refresh"
             >
-              <span className={refreshing ? "spin" : ""}>↻</span>
+              <span className={`btn-icon${refreshing ? " spin" : ""}`}><RefreshCw01 size={20} aria-hidden /></span>
             </button>
             {!readOnly && (
               <button className="btn primary" onClick={() => setCreating(true)}>
@@ -1262,7 +1261,7 @@ const RoadmapBoard = forwardRef<
             {showAllLinks ? "Hide links" : "Show all links"}
           </button>
           {!showAllLinks && (
-            <span style={{ fontSize: 11.5, color: "#94a3b8" }}>Hover a card with dependencies to trace its chain</span>
+            <span style={{ fontSize: 12, color: TOKENS.textTertiary }}>Hover a card with dependencies to trace its chain</span>
           )}
         </div>
       )}
@@ -1271,11 +1270,9 @@ const RoadmapBoard = forwardRef<
       <div className="board-wrap" ref={snapshotRef}>
         <div className="board-title-bar" style={mobile ? { display: "none" } : undefined}>
           <div className="brand-lockup">
-            <svg width="20" height="17" viewBox="0 0 122 104" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M105.793 26.3962H86.4293C85.253 13.2727 74.1686 2.95496 60.7769 2.95496C47.34 2.95496 36.3009 13.2727 35.1246 26.3962H15.7609C8.97452 26.3962 3.45496 31.9171 3.45496 38.7051V88.529C3.45496 95.3169 8.97452 100.838 15.7609 100.838H105.838C112.625 100.838 118.144 95.3169 118.144 88.529V38.7051C118.144 31.9171 112.579 26.3962 105.793 26.3962ZM49.8283 31.8266C51.1856 36.6234 55.5741 40.1079 60.7769 40.1079C65.9798 40.1079 70.3683 36.5782 71.7256 31.8266H80.8645C79.281 41.194 70.685 49.7016 61.6365 58.6618C61.3651 58.9333 61.0484 59.2048 60.7769 59.5216C60.5055 59.2501 60.1888 58.9785 59.9173 58.6618C50.8689 49.7016 42.2728 41.194 40.6894 31.8266H49.8283ZM54.8502 28.7493C54.8502 25.4911 57.5195 22.8212 60.7769 22.8212C64.0344 22.8212 66.7037 25.4911 66.7037 28.7493C66.7037 32.0076 64.0344 34.6775 60.7769 34.6775C57.5195 34.6775 54.8502 32.0076 54.8502 28.7493ZM56.117 62.5083C57.0218 63.4134 57.9719 64.3184 58.8768 65.2687C59.3744 65.7665 60.0983 66.0833 60.7769 66.0833C61.4556 66.0833 62.1795 65.8118 62.6771 65.2687C63.582 64.3637 64.532 63.4134 65.4369 62.5083C75.3902 52.6431 84.8458 43.2304 86.3388 31.8266H95.2968V95.4527H26.2571V31.8266H35.215C36.6628 43.2756 46.1184 52.6431 56.117 62.5083ZM60.7769 8.4306C71.1827 8.4306 79.8239 16.3047 80.955 26.4414H71.8613C70.7755 21.2825 66.206 17.436 60.7317 17.436C55.2574 17.436 50.6879 21.2825 49.6021 26.4414H40.5084C41.7299 16.3047 50.3712 8.4306 60.7769 8.4306ZM8.8388 88.5742V38.7051C8.8388 34.9038 11.9153 31.8266 15.7156 31.8266H20.828V95.4527H15.7156C11.9605 95.4527 8.8388 92.3755 8.8388 88.5742ZM112.715 88.5742C112.715 92.3755 109.639 95.4527 105.838 95.4527H100.726V31.8266H105.838C109.639 31.8266 112.715 34.9038 112.715 38.7051V88.5742Z" fill="#102A56"/>
-            </svg>
+            <img src="/brand/stasher-logo-icon-blue.svg" alt="Stasher" width={32} height={29} />
             <span className="board-title">
-              Pulse{team !== "All" && <span style={{ fontWeight: 500, color: "#94a3b8" }}> · {team}</span>}
+              Pulse{team !== "All" && <span style={{ fontWeight: 500, color: TOKENS.textTertiary }}> · {team}</span>}
             </span>
           </div>
           <span className="board-date">
@@ -1378,7 +1375,7 @@ const RoadmapBoard = forwardRef<
         {/* Assignee colour key — cards are coloured by their primary assignee */}
         {ownerKey.length > 0 && !mobile && (
           <div className="legend">
-            <strong style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginRight: 4 }}>
+            <strong style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em", color: TOKENS.textTertiary, marginRight: 4 }}>
               Assignee:
             </strong>
             {ownerKey.map((name) => {
@@ -1438,13 +1435,13 @@ const RoadmapBoard = forwardRef<
                   {" · Review the message and snapshot before posting."}
                 </p>
               </div>
-              <button className="modal-close-x" onClick={() => setSlackPreview(null)} aria-label="Close">✕</button>
+              <button className="modal-close-x" onClick={() => setSlackPreview(null)} aria-label="Close"><XClose size={20} aria-hidden /></button>
             </div>
 
             <div className="slack-preview-body">
               {/* Editable message text */}
               <div className="slack-preview-message">
-                <div className="slack-preview-label">Message <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "#94a3b8" }}>— edit before posting</span></div>
+                <div className="slack-preview-label">Message <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0, color: TOKENS.textTertiary }}>— edit before posting</span></div>
                 <textarea
                   className="slack-preview-textarea"
                   value={editedMessage}

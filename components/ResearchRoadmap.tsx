@@ -7,6 +7,8 @@ import {
   RESEARCH_STATUS_OPTIONS,
   RESEARCH_ASSIGNEE_OPTIONS,
 } from "@/lib/research-tasks";
+import { BRAND, TOKENS } from "@/lib/brand";
+import { RefreshCw01, XClose } from "@untitledui/icons";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // The timeline mirrors the Product Roadmap exactly so both tabs read against the
@@ -143,10 +145,11 @@ function buildAllMonths(): MonthCol[] {
 }
 
 const STATUS_STYLES: Record<ResearchStatus, { bg: string; fg: string; border: string; dot: string; bar: string }> = {
-  "Planned":     { bg: "#f1f5f9", fg: "#475569", border: "#e2e8f0", dot: "#94a3b8", bar: "#64748b" },
-  "In Progress": { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe", dot: "#3b82f6", bar: "#3b82f6" },
-  "Done":        { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0", dot: "#22c55e", bar: "#22c55e" },
-  "On Hold":     { bg: "#fef9c3", fg: "#854d0e", border: "#fde68a", dot: "#f59e0b", bar: "#f59e0b" },
+  // Brand status tokens; "In Progress" uses the brand blue (no info status).
+  "Planned":     { bg: TOKENS.bgEmphasis,  fg: TOKENS.textBody,    border: BRAND.gray[200],      dot: BRAND.gray[400],      bar: BRAND.gray[500] },
+  "In Progress": { bg: TOKENS.bgSelected,  fg: BRAND.blue[700],    border: BRAND.blue[200],      dot: BRAND.blue[600],      bar: BRAND.blue[600] },
+  "Done":        { bg: TOKENS.successSoft, fg: TOKENS.successText, border: TOKENS.successBorder, dot: TOKENS.successSolid, bar: TOKENS.successSolid },
+  "On Hold":     { bg: TOKENS.warningSoft, fg: TOKENS.warningText, border: TOKENS.warningBorder, dot: TOKENS.warningSolid, bar: TOKENS.warningSolid },
 };
 
 // Research bars are coloured by status (there are no strategy goals here).
@@ -246,7 +249,7 @@ function ResearchModal({ task, onClose, onSaved, onDeleted, readOnly }: ModalPro
             <h2>{isNew ? "New research task" : mode === "edit" ? "Edit research task" : form.name}</h2>
             {!isNew && mode === "edit" && <p className="modal-subtitle">{task.name}</p>}
           </div>
-          <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+          <button className="modal-close-x" onClick={onClose} aria-label="Close"><XClose size={20} aria-hidden /></button>
         </div>
 
         {mode === "edit" ? (
@@ -855,7 +858,7 @@ export default function ResearchRoadmap({ initial, readOnly = false, mobile = fa
         <div className="rm-header-actions">
           <button className="btn icon-btn" onClick={refresh} disabled={refreshing}
             title="Refresh" aria-label="Refresh">
-            <span className={refreshing ? "spin" : ""}>↻</span>
+            <span className={`btn-icon${refreshing ? " spin" : ""}`}><RefreshCw01 size={20} aria-hidden /></span>
           </button>
           {!readOnly && (
             <button className="btn primary" onClick={() => setModal("new")}>+ Add research task</button>

@@ -1,15 +1,16 @@
 import type { Appearance } from "@clerk/types";
+import { TOKENS } from "./brand";
 
 export const clerkAppearance: Appearance = {
   variables: {
-    colorPrimary: "#102A56",
-    colorSuccess: "#00A969",
+    colorPrimary: TOKENS.brandPrimary,
+    colorSuccess: TOKENS.successSolid,
     borderRadius: "0.875rem",
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    fontFamily: "var(--font-inter), Inter, system-ui, -apple-system, sans-serif",
   },
   elements: {
     card: {
-      boxShadow: "0 4px 14px rgba(15,23,42,0.09), 0 2px 5px rgba(15,23,42,0.05)",
+      boxShadow: "0 4px 14px rgba(16,24,40,0.09), 0 2px 5px rgba(16,24,40,0.05)",
     },
   },
 };

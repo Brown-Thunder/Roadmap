@@ -32,6 +32,8 @@ import {
   DELIVERY_TEAMS,
   RoadmapMilestone,
 } from "@/lib/roadmap-initiatives";
+import { BRAND, TOKENS, OKABE_ITO } from "@/lib/brand";
+import { AlertTriangle, Camera01, ChevronRight, DotsGrid, Edit02, InfoCircle, Map01, RefreshCw01, Trash01, XClose } from "@untitledui/icons";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -191,7 +193,7 @@ function phaseFill(type: PhaseType, color: string): { background: string; border
 }
 
 // Neutral colour for the legend's phase swatches (goals carry the colour).
-const LEGEND_INK = "#64748b";
+const LEGEND_INK = TOKENS.textTertiary;
 
 // The quarter view layouts available from Q4 2026 onwards.
 type RoadmapLayout = "goal" | "team";
@@ -276,10 +278,15 @@ function buildAllMonths(): MonthCol[] {
   return cols;
 }
 
-const GOAL_META: Record<string, { color: string; bg: string; light: string }> = {
-  "1": { color: "#0f766e", bg: "#f0fdfa", light: "#ccfbf1" },
-  "2": { color: "#c2410c", bg: "#fff7ed", light: "#fed7aa" },
-  "3": { color: "#7c3aed", bg: "#f5f3ff", light: "#ddd6fe" },
+// Goal colours: the brand's colour-blind-safe Okabe-Ito palette, in order
+// (roadmap bars are data visualisation). `bg` / `light` are tints for headers and
+// chips; `ink` is the text colour that passes contrast on the solid colour.
+// Text on tints always uses text-primary — goal colours alone fail contrast.
+const goalSwatch = (color: string, ink: string) => ({ color, bg: `${color}0F`, light: `${color}26`, ink });
+const GOAL_META: Record<string, { color: string; bg: string; light: string; ink: string }> = {
+  "1": goalSwatch(OKABE_ITO[0], TOKENS.bgSurface),
+  "2": goalSwatch(OKABE_ITO[1], TOKENS.textPrimary),
+  "3": goalSwatch(OKABE_ITO[2], TOKENS.textPrimary),
 };
 
 const SUBGOAL_TO_GOAL: Record<StrategyGoal, string> = {
@@ -299,10 +306,11 @@ function subGoalSortKey(sg: StrategyGoal | "" | undefined): number {
 }
 
 const STATUS_STYLES: Record<RoadmapStatus, { bg: string; fg: string; border: string; dot: string }> = {
-  "Planned":     { bg: "#f1f5f9", fg: "#475569", border: "#e2e8f0",  dot: "#94a3b8" },
-  "In Progress": { bg: "#eff6ff", fg: "#1d4ed8", border: "#bfdbfe",  dot: "#3b82f6" },
-  "Done":        { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0",  dot: "#22c55e" },
-  "On Hold":     { bg: "#fef9c3", fg: "#854d0e", border: "#fde68a",  dot: "#f59e0b" },
+  // Brand status tokens; "In Progress" uses the brand blue (no info status).
+  "Planned":     { bg: TOKENS.bgEmphasis,  fg: TOKENS.textBody,     border: BRAND.gray[200],     dot: BRAND.gray[400] },
+  "In Progress": { bg: TOKENS.bgSelected,  fg: BRAND.blue[700],     border: BRAND.blue[200],     dot: BRAND.blue[600] },
+  "Done":        { bg: TOKENS.successSoft, fg: TOKENS.successText,  border: TOKENS.successBorder, dot: TOKENS.successSolid },
+  "On Hold":     { bg: TOKENS.warningSoft, fg: TOKENS.warningText,  border: TOKENS.warningBorder, dot: TOKENS.warningSolid },
 };
 
 function goalNum(sg: StrategyGoal | "" | undefined): string | undefined {
@@ -312,7 +320,7 @@ function goalColor(initiative: RoadmapInitiative): string {
   const strategy = STRATEGY_BY_ID[initiative.strategy];
   if (strategy) return GOAL_META[strategy.goal].color;
   const gn = goalNum(initiative.strategyGoal);
-  return gn ? GOAL_META[gn].color : "#94a3b8";
+  return gn ? GOAL_META[gn].color : BRAND.gray[400];
 }
 
 // ── Detail / Edit Modal ───────────────────────────────────────────────────────
@@ -394,7 +402,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
   // being viewed, for a new initiative).
   const phaseQuarter = isNew ? defaultQuarter : (initiative.quarter || defaultQuarter);
   const phaseQIdx = QUARTER_IDX[phaseQuarter as Quarter] ?? NEW_STRUCTURE_FROM_QIDX;
-  const phaseColor = companyGoal ? GOAL_META[companyGoal.id].color : "#94a3b8";
+  const phaseColor = companyGoal ? GOAL_META[companyGoal.id].color : BRAND.gray[400];
   const phaseWeekUnits = Array.from({ length: UNITS_PER_QUARTER }, (_, k) => quarterToStartUnit(phaseQIdx) + k);
   const formPhases = form.phases || [];
 
@@ -589,7 +597,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
               <h2>{isNew ? "New initiative" : "Edit initiative"}</h2>
               {!isNew && <p className="modal-subtitle">{initiative.name}</p>}
             </div>
-            <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+            <button className="modal-close-x" onClick={onClose} aria-label="Close"><XClose size={20} aria-hidden /></button>
           </div>
 
           <div className="modal-body rmi-body">
@@ -710,7 +718,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                       {endOpts.sort((x, y) => x - y).map((u) => <option key={u} value={u}>{unitToDateLabel(u - 1)}</option>)}
                     </select>
                     <button type="button" className="rmi-phase-remove" aria-label="Remove phase"
-                      onClick={() => set("phases", formPhases.filter((x) => x.id !== p.id))}>✕</button>
+                      onClick={() => set("phases", formPhases.filter((x) => x.id !== p.id))}><XClose size={16} aria-hidden /></button>
                   </div>
                 );
               })}
@@ -861,7 +869,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
     <div className="overlay" onClick={onClose}>
       <div className="modal rmi-modal" onClick={(e) => e.stopPropagation()}>
         {/* Accent bar */}
-        <div style={{ height: 4, background: gm ? gm.color : "#94a3b8", borderRadius: "18px 18px 0 0" }} />
+        <div style={{ height: 4, background: gm ? gm.color : BRAND.gray[400], borderRadius: "18px 18px 0 0" }} />
 
         <div className="modal-header">
           <div className="modal-header-left">
@@ -869,13 +877,13 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
             <div className="modal-subtitle">
               <span>{newStructure ? (strategyMeta?.label ?? "No strategy set") : initiative.summary}</span>
               {gn && gm && (newStructure || initiative.strategyGoal) && (
-                <span className="rmi-goal-pill" style={{ background: gm.light, color: gm.color }}>
+                <span className="rmi-goal-pill" style={{ background: gm.light, color: TOKENS.textPrimary }}>
                   Goal {gn}
                 </span>
               )}
             </div>
           </div>
-          <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+          <button className="modal-close-x" onClick={onClose} aria-label="Close"><XClose size={20} aria-hidden /></button>
         </div>
 
         {/* Badge strip */}
@@ -993,7 +1001,7 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                     title={expanded ? "Collapse" : "Expand"}
                     onClick={() => setExpandedWsId(expanded ? null : key)}
                   >
-                    <span className={`rmi-workstream-caret${expanded ? " open" : ""}`}>▸</span>
+                    <span className={`rmi-workstream-caret${expanded ? " open" : ""}`}><ChevronRight size={16} aria-hidden /></span>
                     <span className="rmi-workstream-dot" style={{ background: statusDot }} title={details.status} />
                     {renameKey && renamingId === renameKey ? (
                       <input
@@ -1020,10 +1028,10 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
                       className="rmi-workstream-icon-btn"
                       title="Rename"
                       onClick={() => { setRenameDraft(renameSeed); setRenamingId(renameKey); }}
-                    >✎</button>
+                    ><Edit02 size={16} aria-hidden /></button>
                   )}
                   {!readOnly && onDelete && (
-                    <button className="rmi-workstream-delete" title="Delete this workstream" onClick={onDelete}>✕</button>
+                    <button className="rmi-workstream-delete" title="Delete this workstream" onClick={onDelete}><Trash01 size={16} aria-hidden /></button>
                   )}
                 </div>
                 {expanded && (
@@ -1206,9 +1214,9 @@ function RoadmapModal({ initiative, onClose, onSaved, onDeleted, readOnly, defau
               <textarea className="comment-textarea" placeholder="Write a comment…"
                 value={commentText} onChange={(e) => setCommentText(e.target.value)} autoFocus />
               <div className="comment-actions">
-                <button className="btn btn-soft" style={{ fontSize: 13, padding: "6px 12px" }}
+                <button className="btn btn-soft" style={{ fontSize: 14, padding: "6px 12px" }}
                   onClick={() => { setAddingComment(false); setCommentText(""); }}>Cancel</button>
-                <button className="btn primary" style={{ fontSize: 13, padding: "6px 12px" }}
+                <button className="btn primary" style={{ fontSize: 14, padding: "6px 12px" }}
                   onClick={addComment} disabled={busy}>Post comment</button>
               </div>
             </div>
@@ -1366,7 +1374,7 @@ function WorkstreamModal({
               <button className="btn-link ws-parent-link" onClick={onOpenInitiative}>{initiative.name}</button>
             </div>
           </div>
-          <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+          <button className="modal-close-x" onClick={onClose} aria-label="Close"><XClose size={20} aria-hidden /></button>
         </div>
 
         {mode === "view" ? (
@@ -1441,9 +1449,9 @@ function WorkstreamModal({
                   <textarea className="comment-textarea" placeholder="Write a comment…"
                     value={commentText} onChange={(e) => setCommentText(e.target.value)} autoFocus />
                   <div className="comment-actions">
-                    <button className="btn btn-soft" style={{ fontSize: 13, padding: "6px 12px" }}
+                    <button className="btn btn-soft" style={{ fontSize: 14, padding: "6px 12px" }}
                       onClick={() => { setAddingComment(false); setCommentText(""); }}>Cancel</button>
-                    <button className="btn primary" style={{ fontSize: 13, padding: "6px 12px" }}
+                    <button className="btn primary" style={{ fontSize: 14, padding: "6px 12px" }}
                       onClick={addComment} disabled={busy}>Post comment</button>
                   </div>
                 </div>
@@ -1553,7 +1561,7 @@ function SubBarNameModal({
             <h2>Name this workstream</h2>
             <p className="modal-subtitle">e.g. App, Web, MVP, V2…</p>
           </div>
-          <button className="modal-close-x" onClick={onCancel} aria-label="Close">✕</button>
+          <button className="modal-close-x" onClick={onCancel} aria-label="Close"><XClose size={20} aria-hidden /></button>
         </div>
         <div style={{ padding: "16px 24px 20px" }}>
           <input
@@ -1563,7 +1571,7 @@ function SubBarNameModal({
             onChange={(e) => setLabel(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") onCancel(); }}
             placeholder="Workstream name"
-            style={{ fontSize: 15 }}
+            style={{ fontSize: 16 }}
           />
         </div>
         <div className="modal-actions">
@@ -1632,7 +1640,7 @@ function MilestoneCards({ milestones, highlightId }: { milestones: RoadmapMilest
                 <ul className="ms-list">
                   {lines.map((l, i) => (
                     <li key={i}>
-                      <span className="ms-dot" style={{ background: l.goal ? GOAL_META[l.goal].color : "#94a3b8" }}
+                      <span className="ms-dot" style={{ background: l.goal ? GOAL_META[l.goal].color : BRAND.gray[400] }}
                         title={l.goal ? COMPANY_GOALS.find((g) => g.id === l.goal)?.name : undefined} />
                       <span><MilestoneText text={l.text} /></span>
                     </li>
@@ -1677,13 +1685,13 @@ function StrategyModal({
             <h2>{strategy.label}</h2>
             <div className="modal-subtitle"><span>Strategy</span></div>
           </div>
-          <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+          <button className="modal-close-x" onClick={onClose} aria-label="Close"><XClose size={20} aria-hidden /></button>
         </div>
 
         <div className="modal-badges">
           {goals.map((g) => (
             <span key={g.id} className="meta-badge"
-              style={{ background: GOAL_META[g.id].light, color: GOAL_META[g.id].color, borderColor: GOAL_META[g.id].light }}>
+              style={{ background: GOAL_META[g.id].light, color: TOKENS.textPrimary, borderColor: GOAL_META[g.id].color }}>
               Goal {g.id} · {g.name}
             </span>
           ))}
@@ -1903,7 +1911,7 @@ function GanttRow({
         className={`gantt-label-cell${!readOnly ? " gantt-label-draggable" : ""}`}
         {...(!readOnly ? dragHandleProps : {})}
       >
-        {!readOnly && dragHandleProps && <span className="gantt-drag-grip" title="Drag to reorder" aria-hidden>⠿</span>}
+        {!readOnly && dragHandleProps && <span className="gantt-drag-grip" title="Drag to reorder" aria-hidden><DotsGrid size={16} /></span>}
         <span className="gantt-dot" style={{ background: ss.dot }} title={initiative.status} />
         <div className="gantt-label-text">
           <span className="gantt-row-name" onClick={(e) => { e.stopPropagation(); onOpen(null); }} role="button" title="View details">
@@ -1947,7 +1955,7 @@ function GanttRow({
                   onPointerDown={(e) => { e.stopPropagation(); onBarMoveStart(e, initiative.id, null); }}
                   title="Drag to move" />
               )}
-              <span className="gantt-bar-label" style={{ color: gc }}>
+              <span className="gantt-bar-label" style={{ color: TOKENS.textPrimary }}>
                 <span className="gantt-bar-status-dot" style={{ background: (STATUS_STYLES[initiative.status] ?? STATUS_STYLES["Planned"]).dot }} title={initiative.status} />
                 {initiative.mainBarLabel || initiative.name}
               </span>
@@ -1979,7 +1987,7 @@ function GanttRow({
                   onPointerDown={(e) => { e.stopPropagation(); onBarMoveStart(e, initiative.id, sb.id); }}
                   title="Drag to move" />
               )}
-              <span className="gantt-bar-label" style={{ color: gc }}>
+              <span className="gantt-bar-label" style={{ color: TOKENS.textPrimary }}>
                 <span className="gantt-bar-status-dot" style={{ background: (STATUS_STYLES[(sb.status || initiative.status) as RoadmapStatus] ?? STATUS_STYLES["Planned"]).dot }} title={sb.status || initiative.status} />
                 {sb.label}
               </span>
@@ -2224,7 +2232,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
 
     // Render the entire timeline to an image first.
     const dataUrl = await toPng(el, {
-      backgroundColor: "#ffffff",
+      backgroundColor: TOKENS.bgSurface,
       pixelRatio,
       cacheBust: true,
       width: fullWidth,
@@ -2252,7 +2260,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     canvas.height = Math.round(fullHeight * pixelRatio);
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas not supported");
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = TOKENS.bgSurface;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const pr = pixelRatio;
@@ -2863,7 +2871,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
     if (!st) return undefined;
     const goal = COMPANY_GOALS.find((g) => g.id === st.goal);
     const meta = GOAL_META[st.goal];
-    return { label: `Goal ${st.goal}`, color: meta.color, light: meta.light, title: `${goal?.name ?? ""} · ${st.label}` };
+    return { label: `Goal ${st.goal}`, color: TOKENS.textPrimary, light: meta.light, title: `${goal?.name ?? ""} · ${st.label}` };
   }
 
   // Milestones that fall inside the quarter being viewed (Q4 2026 onwards).
@@ -2911,7 +2919,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
           )}
           <button className="btn icon-btn" onClick={refresh} disabled={refreshing}
             title="Refresh" aria-label="Refresh">
-            <span className={refreshing ? "spin" : ""}>↻</span>
+            <span className={`btn-icon${refreshing ? " spin" : ""}`}><RefreshCw01 size={20} aria-hidden /></span>
           </button>
 
           {/* Snapshot — copy to clipboard or save as PNG (desktop only; the
@@ -2926,7 +2934,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                 aria-haspopup="menu"
                 aria-expanded={snapMenuOpen}
               >
-                {capturing ? "Capturing…" : "📷 Snapshot"}
+                <Camera01 size={16} aria-hidden />{capturing ? "Capturing…" : "Snapshot"}
               </button>
               {snapMenuOpen && (
                 <>
@@ -2963,7 +2971,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       {hideFromViewer ? (
         /* Viewer, roadmap not yet published */
         <div className="rm-unpublished">
-          <div className="rm-unpublished-icon" aria-hidden>🗺️</div>
+          <div className="rm-unpublished-icon" aria-hidden><Map01 size={24} /></div>
           <h2 className="rm-unpublished-title">The roadmap is being finalised</h2>
           <p className="rm-unpublished-msg">
             The product roadmap will be available to view once all initiatives have been
@@ -2974,7 +2982,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
       <>
       {/* Planning caveat — kept prominent so the roadmap isn't read as a commitment */}
       <div className="rm-caveat" role="note">
-        <span className="rm-caveat-icon" aria-hidden>!</span>
+        <span className="rm-caveat-icon" aria-hidden><AlertTriangle size={24} /></span>
         <div>
           <p className="rm-caveat-title">This roadmap and its estimates are subject to change throughout the quarter.</p>
           <p className="rm-caveat-body">
@@ -3102,7 +3110,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
           {sections.map((section) => (
             <Fragment key={section.goal?.id ?? "__legacy__"}>
             {section.goal && (
-              <div className="rml-goal-header" style={{ background: GOAL_META[section.goal.id].color }}>
+              <div className="rml-goal-header" style={{ background: GOAL_META[section.goal.id].color, color: GOAL_META[section.goal.id].ink }}>
                 <span className="rml-goal-title">{section.goal.id}. {section.goal.name}</span>
                 <span className="rml-goal-measure">{section.goal.measure}</span>
               </div>
@@ -3116,7 +3124,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
               <div key={group.key} className="rml-group">
                 <div
                   className={`rml-group-header${group.strategy ? " rm-strategy-header" : ""}`}
-                  style={{ background: meta ? meta.bg : "#f8fafc", borderLeft: `4px solid ${meta ? meta.color : "#cbd5e1"}` }}
+                  style={{ background: meta ? meta.bg : TOKENS.bgMuted, borderLeft: `4px solid ${meta ? meta.color : TOKENS.borderDefault}` }}
                   {...(group.strategy ? {
                     role: "button",
                     tabIndex: 0,
@@ -3125,9 +3133,9 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                   } : {})}
                 >
                   <span className="rml-group-name">{summary}</span>
-                  {group.strategy && <span className="rm-strategy-info" aria-hidden>ⓘ</span>}
+                  {group.strategy && <span className="rm-strategy-info" aria-hidden><InfoCircle size={16} /></span>}
                   {!newStructure && gn && meta && (
-                    <span className="rml-goal-badge" style={{ background: meta.light, color: meta.color }}>Goal {gn}</span>
+                    <span className="rml-goal-badge" style={{ background: meta.light, color: TOKENS.textPrimary }}>Goal {gn}</span>
                   )}
                 </div>
                 {groupItems.map((item) => {
@@ -3260,7 +3268,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
             {sections.map((section) => (
             <Fragment key={section.goal?.id ?? "__legacy__"}>
             {section.goal && (
-              <div className="gantt-goal-header" style={{ background: GOAL_META[section.goal.id].color }}>
+              <div className="gantt-goal-header" style={{ background: GOAL_META[section.goal.id].color, color: GOAL_META[section.goal.id].ink }}>
                 <div className="gantt-label-cell">
                   <span className="gantt-goal-title">{section.goal.id}. {section.goal.name}</span>
                   <span className="gantt-goal-measure">({section.goal.measure})</span>
@@ -3296,16 +3304,16 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                       },
                     } : {})}
                     style={{
-                      background: meta ? meta.bg : "#f8fafc",
-                      borderLeft: `4px solid ${meta ? meta.color : "#cbd5e1"}`,
+                      background: meta ? meta.bg : TOKENS.bgMuted,
+                      borderLeft: `4px solid ${meta ? meta.color : TOKENS.borderDefault}`,
                     }}
                   >
                     <div className="gantt-label-cell">
                       <span className="gantt-group-name" title={group.label}>{group.label}</span>
-                      {group.strategy && <span className="rm-strategy-info" aria-hidden>ⓘ</span>}
+                      {group.strategy && <span className="rm-strategy-info" aria-hidden><InfoCircle size={16} /></span>}
                       {group.strategy?.alsoGoals?.map((g) => (
                         <span key={g} className="gantt-goal-badge"
-                          style={{ background: GOAL_META[g].light, color: GOAL_META[g].color }}>
+                          style={{ background: GOAL_META[g].light, color: TOKENS.textPrimary }}>
                           Also Goal {g}
                         </span>
                       ))}
@@ -3315,7 +3323,7 @@ export default function ProductRoadmap({ initial, readOnly = false, published = 
                       {!newStructure && gn && meta && (
                         <span
                           className="gantt-goal-badge"
-                          style={{ background: meta.light, color: meta.color }}
+                          style={{ background: meta.light, color: TOKENS.textPrimary }}
                         >
                           Goal {gn}
                         </span>

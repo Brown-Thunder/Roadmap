@@ -5,6 +5,7 @@ import Link from "next/link";
 import RoadmapBoard, { RoadmapBoardHandle } from "@/components/RoadmapBoard";
 import UserMenu from "@/components/UserMenu";
 import { Initiative } from "@/lib/types";
+import { ArrowLeft } from "@untitledui/icons";
 
 export default function ReviewClient({ initial }: { initial: Initiative[] }) {
   const boardRef = useRef<RoadmapBoardHandle>(null);
@@ -39,7 +40,7 @@ export default function ReviewClient({ initial }: { initial: Initiative[] }) {
       <div className="topbar">
         <div className="topbar-row topbar-row-main">
           <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Review weekly snapshot</h1>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Review weekly snapshot</h1>
             <div className="sub">
               This is exactly what will be posted to the channel. Approve to publish.
             </div>
@@ -47,7 +48,7 @@ export default function ReviewClient({ initial }: { initial: Initiative[] }) {
           <nav className="topbar-actions">
             <UserMenu />
             <Link href="/" className="btn btn-soft">
-              ← Back to board
+              <ArrowLeft size={16} aria-hidden />Back to board
             </Link>
             <button className="btn slack" onClick={publish} disabled={busy}>
               {busy ? "Publishing…" : "Approve & post to #temp-roadmap"}

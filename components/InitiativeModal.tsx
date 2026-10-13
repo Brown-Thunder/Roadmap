@@ -26,6 +26,8 @@ import {
 import { issueMatchesTeam, SQUAD_ORDER, STATUS_ORDER } from "@/lib/github";
 import type { GithubIssue } from "@/lib/github";
 import AssigneePicker from "./AssigneePicker";
+import { BRAND, TOKENS } from "@/lib/brand";
+import { ChevronDown, File06, Link01, LinkExternal01, MarkerPin01, Paperclip, RefreshCw01, Tag01, Users01, XClose } from "@untitledui/icons";
 
 type Draft = Partial<Initiative>;
 
@@ -62,26 +64,28 @@ function todayISO(): string {
 }
 
 const DEP_CHIP_STYLE: Record<DepType, { bg: string; color: string; border: string }> = {
-  "blocked-by": { bg: "#fef2f2", color: "#991b1b", border: "#fecaca" },
-  "waiting-on": { bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
-  "related-to": { bg: "#f0f9ff", color: "#075985", border: "#bae6fd" },
+  "blocked-by": { bg: TOKENS.errorSoft,   color: TOKENS.errorText,   border: TOKENS.errorBorder },
+  "waiting-on": { bg: TOKENS.warningSoft, color: TOKENS.warningText, border: TOKENS.warningBorder },
+  "related-to": { bg: TOKENS.bgSelected,  color: BRAND.blue[700],    border: BRAND.blue[200] },
 };
 
 const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  priority:       { bg: "#fef2f2", color: "#b91c1c", border: "#fecaca" },
-  delayed:        { bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
-  blocked:        { bg: "#fdf2f8", color: "#a21caf", border: "#f5d0fe" },
-  "needs review": { bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
-  "quick win":    { bg: "#f0fdf4", color: "#15803d", border: "#bbf7d0" },
-  "tech debt":    { bg: "#f8fafc", color: "#475569", border: "#cbd5e1" },
-  discovery:      { bg: "#fafaf9", color: "#57534e", border: "#d6d3d1" },
-  dependencies:   { bg: "#fefce8", color: "#a16207", border: "#fde68a" },
+  // Status tokens where the tag is a status; categorical brand primitives otherwise.
+  priority:       { bg: TOKENS.errorSoft,   color: TOKENS.errorText,   border: TOKENS.errorBorder },
+  delayed:        { bg: TOKENS.warningSoft, color: TOKENS.warningText, border: TOKENS.warningBorder },
+  blocked:        { bg: BRAND.pink[50],     color: BRAND.pink[700],    border: BRAND.pink[200] },
+  "needs review": { bg: TOKENS.bgSelected,  color: BRAND.blue[700],    border: BRAND.blue[200] },
+  "quick win":    { bg: TOKENS.successSoft, color: TOKENS.successText, border: TOKENS.successBorder },
+  "tech debt":    { bg: TOKENS.bgMuted,     color: TOKENS.textSecondary, border: TOKENS.borderDefault },
+  discovery:      { bg: BRAND.lavender[50], color: BRAND.lavender[700], border: BRAND.lavender[200] },
+  dependencies:   { bg: BRAND.gold[50],     color: BRAND.gold[700],    border: BRAND.gold[200] },
 };
 
 // Green = todo/released/done, amber = in-flight/review/QA/merge, purple = backlog.
-const GREEN_PILL  = { bg: "#f0fdf4", fg: "#15803d", border: "#bbf7d0", accent: "#22c55e" };
-const AMBER_PILL  = { bg: "#fff7ed", fg: "#c2410c", border: "#fed7aa", accent: "#f97316" };
-const PURPLE_PILL = { bg: "#f5f3ff", fg: "#6d28d9", border: "#ddd6fe", accent: "#8b5cf6" };
+// Brand status tokens: success / warning, and neutral for backlog.
+const GREEN_PILL  = { bg: TOKENS.successSoft, fg: TOKENS.successText, border: TOKENS.successBorder, accent: TOKENS.successSolid };
+const AMBER_PILL  = { bg: TOKENS.warningSoft, fg: TOKENS.warningText, border: TOKENS.warningBorder, accent: TOKENS.warningSolid };
+const PURPLE_PILL = { bg: TOKENS.bgEmphasis,  fg: TOKENS.textBody,    border: BRAND.gray[200],      accent: BRAND.gray[400] };
 const STATUS_PILL: Record<string, { bg: string; fg: string; border: string; accent: string }> = {
   Backlog:                  PURPLE_PILL,
   "To Do":                  GREEN_PILL,
@@ -94,7 +98,7 @@ const STATUS_PILL: Record<string, { bg: string; fg: string; border: string; acce
 };
 
 function tagStyle(tag: string) {
-  return TAG_COLORS[tag] ?? { bg: "#f1f5f9", color: "#334155", border: "#cbd5e1" };
+  return TAG_COLORS[tag] ?? { bg: TOKENS.bgEmphasis, color: TOKENS.textBody, border: TOKENS.borderDefault };
 }
 
 // ── Small helpers ──────────────────────────────────────────────────────────────
@@ -111,31 +115,27 @@ function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: stri
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
       <label style={{
-        display: "block", fontSize: 11, fontWeight: 700, color: "#64748b",
+        display: "block", fontSize: 12, fontWeight: 700, color: TOKENS.textTertiary,
         textTransform: "uppercase", letterSpacing: "0.07em",
       }}>
         {children}
       </label>
       {hint && (
-        <span style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>{hint}</span>
+        <span style={{ fontSize: 12, color: TOKENS.textTertiary, fontStyle: "italic" }}>{hint}</span>
       )}
     </div>
   );
 }
 
-function SectionHeading({ icon, title }: { icon: string; title: string }) {
+function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 8, marginBottom: 16,
-      paddingBottom: 10, borderBottom: "1px solid #e2e8f0",
+      display: "flex", alignItems: "center", gap: 6, marginBottom: 16,
+      paddingBottom: 10, borderBottom: `1px solid ${BRAND.gray[200]}`,
     }}>
-      <span style={{
-        width: 26, height: 26, borderRadius: 7,
-        background: "#f1f5f9", display: "inline-flex",
-        alignItems: "center", justifyContent: "center",
-        fontSize: 13, flexShrink: 0,
-      }}>{icon}</span>
-      <span style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{title}</span>
+      {/* Line icon in the surrounding text colour (no filled container). */}
+      <span style={{ display: "inline-flex", color: TOKENS.textSecondary, flexShrink: 0 }} aria-hidden>{icon}</span>
+      <span style={{ fontWeight: 600, fontSize: 14, color: TOKENS.textPrimary }}>{title}</span>
     </div>
   );
 }
@@ -163,7 +163,7 @@ function StyledSelect({
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
-      <span className="styled-select-arrow">▾</span>
+      <span className="styled-select-arrow"><ChevronDown size={16} aria-hidden /></span>
     </div>
   );
 }
@@ -528,14 +528,14 @@ export default function InitiativeModal({
                 {initiative.tShirtSize && (
                   <span className="size-badge">{initiative.tShirtSize}</span>
                 )}
-                <span style={{ color: "#94a3b8" }}>·</span>
-                <span style={{ color: "#64748b" }}>{initiative.area}</span>
+                <span style={{ color: TOKENS.textTertiary }}>·</span>
+                <span style={{ color: TOKENS.textTertiary }}>{initiative.area}</span>
                 {initiative.pod && (
-                  <><span style={{ color: "#cbd5e1" }}>›</span><span style={{ color: "#64748b" }}>{initiative.pod}</span></>
+                  <><span style={{ color: TOKENS.textTertiary }}>›</span><span style={{ color: TOKENS.textTertiary }}>{initiative.pod}</span></>
                 )}
               </div>
             </div>
-            <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+            <button className="modal-close-x" onClick={onClose} aria-label="Close"><XClose size={20} aria-hidden /></button>
           </div>
 
           {/* Primary actions — at the top so they're always in reach */}
@@ -623,7 +623,7 @@ export default function InitiativeModal({
               {initiative.spansPods && (
                 <div className="card-info-row">
                   <div className="card-info-key">Scope</div>
-                  <div className="card-info-val" style={{ color: "#92400e", fontWeight: 600 }}>
+                  <div className="card-info-val" style={{ color: TOKENS.warningText, fontWeight: 600 }}>
                     Spans Internal + 3rd Party Lockers
                   </div>
                 </div>
@@ -655,21 +655,21 @@ export default function InitiativeModal({
 
           {initiative.description && (
             <div className="modal-section">
-              <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>Description</p>
+              <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: TOKENS.textTertiary, textTransform: "uppercase", letterSpacing: "0.07em" }}>Description</p>
               <p className="modal-desc">{initiative.description}</p>
             </div>
           )}
 
           {initiative.notes && (
             <div className="modal-section">
-              <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>Notes</p>
+              <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: TOKENS.textTertiary, textTransform: "uppercase", letterSpacing: "0.07em" }}>Notes</p>
               <div className="modal-notes">{initiative.notes}</div>
             </div>
           )}
 
           {initiative.link && (
             <div className="modal-section" style={{ paddingTop: 0 }}>
-              <a className="link" href={initiative.link} target="_blank" rel="noreferrer">Open linked work ↗</a>
+              <a className="link" href={initiative.link} target="_blank" rel="noreferrer">Open linked work <LinkExternal01 size={16} aria-hidden /></a>
             </div>
           )}
 
@@ -701,9 +701,9 @@ export default function InitiativeModal({
                 <textarea className="comment-textarea" placeholder="Write a comment…"
                   value={commentText} onChange={(e) => setCommentText(e.target.value)} autoFocus />
                 <div className="comment-actions">
-                  <button className="btn" style={{ fontSize: 13, padding: "6px 12px" }}
+                  <button className="btn" style={{ fontSize: 14, padding: "6px 12px" }}
                     onClick={() => { setAddingComment(false); setCommentText(""); }}>Cancel</button>
-                  <button className="btn primary" style={{ fontSize: 13, padding: "6px 12px" }}
+                  <button className="btn primary" style={{ fontSize: 14, padding: "6px 12px" }}
                     onClick={addComment}>Post comment</button>
                 </div>
               </div>
@@ -722,7 +722,7 @@ export default function InitiativeModal({
   }
 
   // ── EDIT / CREATE MODE ────────────────────────────────────────────────────────
-  const accentColor = (form.status && STATUS_PILL[form.status]?.accent) ?? "#4f46e5";
+  const accentColor = (form.status && STATUS_PILL[form.status]?.accent) ?? TOKENS.interactive;
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -734,28 +734,28 @@ export default function InitiativeModal({
         {/* Header */}
         <div style={{
           padding: "18px 24px 16px",
-          borderBottom: "1px solid #e2e8f0",
+          borderBottom: `1px solid ${BRAND.gray[200]}`,
           display: "flex", alignItems: "flex-start", gap: 12,
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: TOKENS.textTertiary, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 4 }}>
               {isNew ? "New initiative" : "Editing initiative"}
             </div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", lineHeight: 1.2 }}>
+            <div style={{ fontSize: 18, fontWeight: 600, color: TOKENS.textPrimary, lineHeight: 1.2 }}>
               {isNew ? "What are we building?" : (form.name || "Untitled")}
             </div>
           </div>
-          <button className="modal-close-x" onClick={onClose} aria-label="Close">✕</button>
+          <button className="modal-close-x" onClick={onClose} aria-label="Close"><XClose size={20} aria-hidden /></button>
         </div>
 
         {/* Team picker — sits above everything so it filters the GitHub issue list */}
         <div style={{
           padding: "10px 24px",
-          borderBottom: "1px solid #e2e8f0",
-          background: "#fafbfc",
+          borderBottom: `1px solid ${BRAND.gray[200]}`,
+          background: BRAND.gray[25],
           display: "flex", alignItems: "center", gap: 12,
         }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: TOKENS.textTertiary, textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>
             Team
           </span>
           <div style={{ display: "flex", gap: 6 }}>
@@ -765,12 +765,12 @@ export default function InitiativeModal({
                 type="button"
                 onClick={() => set("team", t)}
                 style={{
-                  fontSize: 12.5, fontWeight: 600, padding: "5px 14px",
+                  fontSize: 12, fontWeight: 600, padding: "5px 14px",
                   borderRadius: 8, border: "1.5px solid",
                   cursor: "pointer",
-                  background: form.team === t ? "#eef2ff" : "#fff",
-                  color: form.team === t ? "#3730a3" : "#475569",
-                  borderColor: form.team === t ? "#c7d2fe" : "#e2e8f0",
+                  background: form.team === t ? TOKENS.bgSelected : TOKENS.bgSurface,
+                  color: form.team === t ? BRAND.blue[700] : TOKENS.textSecondary,
+                  borderColor: form.team === t ? BRAND.blue[200] : BRAND.gray[200],
                   transition: "all 0.12s",
                 }}
               >
@@ -833,7 +833,7 @@ export default function InitiativeModal({
                     aria-label="Refresh GitHub issues"
                     style={{ flexShrink: 0 }}
                   >
-                    <span className={ghLoading ? "spin" : ""}>↻</span>
+                    <span className={`btn-icon${ghLoading ? " spin" : ""}`}><RefreshCw01 size={16} aria-hidden /></span>
                   </button>
                 </div>
               ) : (
@@ -860,7 +860,7 @@ export default function InitiativeModal({
                     {ghSections.map((section) => (
                       <div key={section.key} className="gh-section">
                         <div className={`gh-section-head ${section.backlog ? "backlog" : ""}`}>
-                          <span><span className="gh-section-cal" aria-hidden>👥</span> {section.label}</span>
+                          <span><span className="gh-section-cal" aria-hidden><Users01 size={16} /></span> {section.label}</span>
                           <span className="gh-section-count">{section.items.length}</span>
                         </div>
                         {section.items.map((issue) => (
@@ -891,10 +891,10 @@ export default function InitiativeModal({
 
           {/* ── Section 1: Basics ─────────────────────────────── */}
           <div className="form-section">
-            <SectionHeading icon="📋" title="Basic details" />
+            <SectionHeading icon={<File06 size={16} />} title="Basic details" />
 
             <div className="form-field">
-              <FieldLabel>Initiative name <span style={{ color: "#ef4444" }}>*</span></FieldLabel>
+              <FieldLabel>Initiative name <span style={{ color: TOKENS.errorText }}>*</span></FieldLabel>
               <input
                 className="form-input"
                 value={form.name || ""}
@@ -969,7 +969,7 @@ export default function InitiativeModal({
 
           {/* ── Section 2: Placement ──────────────────────────── */}
           <div className="form-section">
-            <SectionHeading icon="📍" title="Where does it live?" />
+            <SectionHeading icon={<MarkerPin01 size={16} />} title="Where does it live?" />
 
             <div className="form-field">
               <FieldLabel>Timeframe</FieldLabel>
@@ -989,7 +989,7 @@ export default function InitiativeModal({
                     <select value={form.area || ""} onChange={(e) => setArea(e.target.value)} className="styled-select">
                       {allAreas.map((o) => <option key={o}>{o}</option>)}
                     </select>
-                    <span className="styled-select-arrow">▾</span>
+                    <span className="styled-select-arrow"><ChevronDown size={16} aria-hidden /></span>
                   </div>
                   <button type="button" className="add-option-btn"
                     onClick={() => setShowAddArea((v) => !v)} title="Add new area">+</button>
@@ -999,12 +999,12 @@ export default function InitiativeModal({
                     <input autoFocus placeholder="New area name" value={newAreaText}
                       onChange={(e) => setNewAreaText(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleAddArea(); }} />
-                    <button className="btn primary" style={{ padding: "7px 12px", fontSize: 13 }}
+                    <button className="btn primary" style={{ padding: "7px 12px", fontSize: 14 }}
                       onClick={handleAddArea}>Add</button>
                   </div>
                 )}
                 {!showPods && (
-                  <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 6 }}>
+                  <div style={{ fontSize: 12, color: TOKENS.textTertiary, marginTop: 6 }}>
                     {currentArea} is its own pod — no pod needed.
                   </div>
                 )}
@@ -1019,7 +1019,7 @@ export default function InitiativeModal({
                       <select value={form.pod || ""} onChange={(e) => set("pod", e.target.value)} className="styled-select">
                         {podChoices.map((o) => <option key={o}>{o}</option>)}
                       </select>
-                      <span className="styled-select-arrow">▾</span>
+                      <span className="styled-select-arrow"><ChevronDown size={16} aria-hidden /></span>
                     </div>
                     <button type="button" className="add-option-btn"
                       onClick={() => setShowAddPod((v) => !v)} title="Add new pod">+</button>
@@ -1029,7 +1029,7 @@ export default function InitiativeModal({
                       <input autoFocus placeholder="New pod name" value={newPodText}
                         onChange={(e) => setNewPodText(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") handleAddPod(); }} />
-                      <button className="btn primary" style={{ padding: "7px 12px", fontSize: 13 }}
+                      <button className="btn primary" style={{ padding: "7px 12px", fontSize: 14 }}
                         onClick={handleAddPod}>Add</button>
                     </div>
                   )}
@@ -1043,21 +1043,21 @@ export default function InitiativeModal({
                 <label className="spans-toggle" style={{
                   display: "flex", alignItems: "center", gap: 10,
                   padding: "10px 14px", borderRadius: 10, cursor: "pointer",
-                  border: form.spansPods ? "1.5px solid #f59e0b" : "1.5px solid #e2e8f0",
-                  background: form.spansPods ? "#fffbeb" : "#fafbfc",
+                  border: form.spansPods ? `1.5px solid ${BRAND.yellow[500]}` : `1.5px solid ${BRAND.gray[200]}`,
+                  background: form.spansPods ? TOKENS.warningSoft : BRAND.gray[25],
                   transition: "all 0.15s",
                 }}>
                   <input
                     type="checkbox"
                     checked={!!form.spansPods}
                     onChange={(e) => set("spansPods", e.target.checked)}
-                    style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#f59e0b" }}
+                    style={{ width: 16, height: 16, cursor: "pointer", accentColor: BRAND.yellow[500] }}
                   />
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13.5, color: form.spansPods ? "#92400e" : "#0f172a" }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: form.spansPods ? TOKENS.warningText : TOKENS.textPrimary }}>
                       Spans both pods
                     </div>
-                    <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 1 }}>
+                    <div style={{ fontSize: 12, color: TOKENS.textTertiary, marginTop: 1 }}>
                       This initiative covers both Internal and 3rd Party Lockers
                     </div>
                   </div>
@@ -1068,7 +1068,7 @@ export default function InitiativeModal({
 
           {/* ── Section 3: People ─────────────────────────────── */}
           <div className="form-section">
-            <SectionHeading icon="👥" title="Who's involved?" />
+            <SectionHeading icon={<Users01 size={16} />} title="Who's involved?" />
 
             <div className="form-row-2">
               <div className="form-field">
@@ -1096,7 +1096,7 @@ export default function InitiativeModal({
 
           {/* ── Section 4: Labels ─────────────────────────────── */}
           <div className="form-section">
-            <SectionHeading icon="🏷️" title="Labels & classification" />
+            <SectionHeading icon={<Tag01 size={16} />} title="Labels & classification" />
 
             <div className="form-field">
               <FieldLabel>Layer</FieldLabel>
@@ -1120,7 +1120,7 @@ export default function InitiativeModal({
             </div>
 
             <div className="form-field">
-              <FieldLabel>Tags <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "#94a3b8", fontSize: 11 }}>— select all that apply</span></FieldLabel>
+              <FieldLabel>Tags <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: TOKENS.textTertiary, fontSize: 12 }}>— select all that apply</span></FieldLabel>
               <div className="tag-picker">
                 {DEFAULT_TAGS.map((tag) => {
                   const active = (form.tags ?? []).includes(tag);
@@ -1143,7 +1143,7 @@ export default function InitiativeModal({
           {/* ── Section 5: Dependencies ───────────────────────── */}
           {allInitiatives.length > 0 && (
             <div className="form-section">
-              <SectionHeading icon="🔗" title="Dependencies" />
+              <SectionHeading icon={<Link01 size={16} />} title="Dependencies" />
               <div className="form-field">
                 <FieldLabel hint="how is this initiative linked to others?">Linked initiatives</FieldLabel>
                 {(() => {
@@ -1172,7 +1172,7 @@ export default function InitiativeModal({
                       {allInitiatives.length > 6 && (
                         <input
                           className="form-input"
-                          style={{ marginBottom: 6, fontSize: 13 }}
+                          style={{ marginBottom: 6, fontSize: 14 }}
                           placeholder="Filter initiatives…"
                           value={depSearch}
                           onChange={(e) => setDepSearch(e.target.value)}
@@ -1180,7 +1180,7 @@ export default function InitiativeModal({
                       )}
                       <div className="dep-picker">
                         {candidates.length === 0 && (
-                          <div style={{ padding: "8px", fontSize: 12.5, color: "#94a3b8" }}>No initiatives found.</div>
+                          <div style={{ padding: "8px", fontSize: 12, color: TOKENS.textTertiary }}>No initiatives found.</div>
                         )}
                         {candidates.map((c) => {
                           const activeType = getDepType(c.id);
@@ -1191,7 +1191,7 @@ export default function InitiativeModal({
                                   type="checkbox"
                                   checked={activeType !== null}
                                   onChange={() => setDepLink(c.id, activeType !== null ? null : "blocked-by")}
-                                  style={{ width: 15, height: 15, cursor: "pointer", accentColor: "#6366f1", flexShrink: 0 }}
+                                  style={{ width: 15, height: 15, cursor: "pointer", accentColor: TOKENS.interactive, flexShrink: 0 }}
                                 />
                                 <span className="dep-picker-name">{c.name}</span>
                                 <span className="dep-picker-area">{c.area}</span>
@@ -1204,12 +1204,12 @@ export default function InitiativeModal({
                                       type="button"
                                       onClick={() => setDepLink(c.id, t)}
                                       style={{
-                                        fontSize: 11.5, fontWeight: 600, padding: "3px 9px",
+                                        fontSize: 12, fontWeight: 600, padding: "3px 9px",
                                         borderRadius: 6, border: "1.5px solid",
                                         cursor: "pointer",
-                                        background: activeType === t ? DEP_CHIP_STYLE[t].bg : "#f8fafc",
-                                        color: activeType === t ? DEP_CHIP_STYLE[t].color : "#64748b",
-                                        borderColor: activeType === t ? DEP_CHIP_STYLE[t].border : "#e2e8f0",
+                                        background: activeType === t ? DEP_CHIP_STYLE[t].bg : TOKENS.bgMuted,
+                                        color: activeType === t ? DEP_CHIP_STYLE[t].color : TOKENS.textTertiary,
+                                        borderColor: activeType === t ? DEP_CHIP_STYLE[t].border : BRAND.gray[200],
                                       }}
                                     >
                                       {DEP_TYPE_LABELS[t]}
@@ -1230,7 +1230,7 @@ export default function InitiativeModal({
 
           {/* ── Section 6: Extra ──────────────────────────────── */}
           <div className="form-section" style={{ borderBottom: "none" }}>
-            <SectionHeading icon="📎" title="Links & notes" />
+            <SectionHeading icon={<Paperclip size={16} />} title="Links & notes" />
 
             <div className="form-field">
               <FieldLabel hint="optional">Link (GitHub / doc / ticket)</FieldLabel>
@@ -1261,7 +1261,7 @@ export default function InitiativeModal({
                 value={form.completedDate || ""}
                 onChange={(e) => set("completedDate", e.target.value)}
               />
-              <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: TOKENS.textTertiary, marginTop: 6 }}>
                 Setting a date moves this item to History. Clear it to bring it back to the roadmap.
               </div>
             </div>

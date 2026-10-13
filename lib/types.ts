@@ -1,3 +1,4 @@
+import { BRAND, TOKENS } from "./brand";
 export type Timeframe = "This Week" | "Next Week" | "Future";
 
 export type Status =
@@ -93,23 +94,23 @@ export const AREA_ORDER: string[] = [
   "Other",
 ];
 
-// Dot colours per status. Green = not-yet-started / released / done,
-// amber = in-flight/review/QA/merge, purple = backlog. Mirrors the tracker.
+// Dot colours per status (brand status tokens). Green = not-yet-started /
+// released / done, amber = in-flight/review/QA/merge, grey = backlog.
 export const STATUS_COLORS: Record<string, string> = {
-  Backlog: "#8b5cf6",
-  "To Do": "#16a34a",
-  "In progress": "#d97706",
-  "In Review": "#d97706",
-  "QA Testing": "#d97706",
-  "Ready for merge": "#d97706",
-  "Ready for next release": "#16a34a",
-  Done: "#16a34a",
+  Backlog: TOKENS.textDisabled,
+  "To Do": TOKENS.successSolid,
+  "In progress": TOKENS.warningSolid,
+  "In Review": TOKENS.warningSolid,
+  "QA Testing": TOKENS.warningSolid,
+  "Ready for merge": TOKENS.warningSolid,
+  "Ready for next release": TOKENS.successSolid,
+  Done: TOKENS.successSolid,
 };
 
 export const TIMEFRAME_ACCENT: Record<Timeframe, string> = {
-  "This Week": "#16a34a",
-  "Next Week": "#d97706",
-  Future: "#64748b",
+  "This Week": TOKENS.successSolid,
+  "Next Week": TOKENS.warningSolid,
+  Future: TOKENS.textTertiary,
 };
 
 // Stored team values (also the Airtable "Team" values).
@@ -213,43 +214,38 @@ export interface AssigneeColor {
   accent: string;
 }
 
-export const ASSIGNEE_PALETTE: AssigneeColor[] = [
-  { bg: "#eef2ff", fg: "#3730a3", border: "#c7d2fe", accent: "#6366f1" }, // indigo
-  { bg: "#ecfdf5", fg: "#065f46", border: "#a7f3d0", accent: "#10b981" }, // emerald
-  { bg: "#fff7ed", fg: "#9a3412", border: "#fed7aa", accent: "#f97316" }, // orange
-  { bg: "#fdf2f8", fg: "#9d174d", border: "#fbcfe8", accent: "#ec4899" }, // pink
-  { bg: "#eff6ff", fg: "#1e40af", border: "#bfdbfe", accent: "#3b82f6" }, // blue
-  { bg: "#f5f3ff", fg: "#5b21b6", border: "#ddd6fe", accent: "#8b5cf6" }, // violet
-  { bg: "#fefce8", fg: "#854d0e", border: "#fef08a", accent: "#eab308" }, // amber
-  { bg: "#f0fdfa", fg: "#115e59", border: "#99f6e4", accent: "#14b8a6" }, // teal
-  { bg: "#fef2f2", fg: "#991b1b", border: "#fecaca", accent: "#ef4444" }, // red
-  { bg: "#f7fee7", fg: "#3f6212", border: "#d9f99d", accent: "#84cc16" }, // lime
-  { bg: "#f0f9ff", fg: "#075985", border: "#bae6fd", accent: "#0ea5ce" }, // sky
-  { bg: "#fdf4ff", fg: "#86198f", border: "#f5d0fe", accent: "#d946ef" }, // fuchsia
-];
+// Built from brand primitives. Hues the brand palette lacks (indigo, teal, lime,
+// fuchsia, amber) map to the nearest brand family at a different shade, so the
+// colour names stored in the Airtable People table keep working.
+type Family = { 50: string; 200: string; 300: string; 400: string; 600: string; 700: string; 800: string; 900: string };
+const swatch = (fam: Family, shade: "base" | "deep" | "light"): AssigneeColor =>
+  shade === "base"  ? { bg: fam[50], fg: fam[800], border: fam[200], accent: fam[600] }
+  : shade === "deep" ? { bg: fam[50], fg: fam[900], border: fam[300], accent: fam[800] }
+  :                    { bg: fam[50], fg: fam[700], border: fam[200], accent: fam[400] };
+
+// Named colours assignable to a person in the Airtable People table. A card
+// adopts its primary assignee's colour.
+export const NAMED_ASSIGNEE_COLORS: Record<string, AssigneeColor> = {
+  Indigo:  swatch(BRAND.lavender, "base"),
+  Emerald: swatch(BRAND.green, "base"),
+  Orange:  swatch(BRAND.yellow, "base"),
+  Pink:    swatch(BRAND.pink, "base"),
+  Blue:    swatch(BRAND.blue, "base"),
+  Violet:  swatch(BRAND.purple, "base"),
+  Amber:   { bg: BRAND.gold[50], fg: BRAND.gold[800], border: BRAND.gold[200], accent: BRAND.gold[500] },
+  Teal:    swatch(BRAND.green, "deep"),
+  Red:     swatch(BRAND.red, "base"),
+  Lime:    swatch(BRAND.green, "light"),
+  Sky:     swatch(BRAND.blue, "light"),
+  Fuchsia: swatch(BRAND.pink, "deep"),
+};
+
+export const ASSIGNEE_PALETTE: AssigneeColor[] = Object.values(NAMED_ASSIGNEE_COLORS);
 
 const UNASSIGNED_COLOR: AssigneeColor = {
-  bg: "#f8fafc", fg: "#475569", border: "#e2e8f0", accent: "#94a3b8",
+  bg: TOKENS.bgMuted, fg: TOKENS.textSecondary, border: BRAND.gray[200], accent: BRAND.gray[400],
 };
 export const UNASSIGNED_ASSIGNEE_COLOR = UNASSIGNED_COLOR;
-
-// Named colours assignable to a person in the Airtable People table. Each maps
-// to a full {bg, fg, border, accent} swatch. These are the distinct, curated
-// colours a card adopts from its primary assignee.
-export const NAMED_ASSIGNEE_COLORS: Record<string, AssigneeColor> = {
-  Indigo:  { bg: "#eef2ff", fg: "#3730a3", border: "#c7d2fe", accent: "#6366f1" },
-  Emerald: { bg: "#ecfdf5", fg: "#065f46", border: "#a7f3d0", accent: "#10b981" },
-  Orange:  { bg: "#fff7ed", fg: "#9a3412", border: "#fed7aa", accent: "#f97316" },
-  Pink:    { bg: "#fdf2f8", fg: "#9d174d", border: "#fbcfe8", accent: "#ec4899" },
-  Blue:    { bg: "#eff6ff", fg: "#1e40af", border: "#bfdbfe", accent: "#3b82f6" },
-  Violet:  { bg: "#f5f3ff", fg: "#5b21b6", border: "#ddd6fe", accent: "#8b5cf6" },
-  Amber:   { bg: "#fefce8", fg: "#854d0e", border: "#fef08a", accent: "#eab308" },
-  Teal:    { bg: "#f0fdfa", fg: "#115e59", border: "#99f6e4", accent: "#14b8a6" },
-  Red:     { bg: "#fef2f2", fg: "#991b1b", border: "#fecaca", accent: "#ef4444" },
-  Lime:    { bg: "#f7fee7", fg: "#3f6212", border: "#d9f99d", accent: "#84cc16" },
-  Sky:     { bg: "#f0f9ff", fg: "#075985", border: "#bae6fd", accent: "#0ea5ce" },
-  Fuchsia: { bg: "#fdf4ff", fg: "#86198f", border: "#f5d0fe", accent: "#d946ef" },
-};
 
 // Resolve a person's colour. If an explicit map is provided (from the People
 // table's assigned colours), that wins; otherwise fall back to a stable hash so

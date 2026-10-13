@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, XClose } from "@untitledui/icons";
 
 // Multi-select assignee picker: a checklist dropdown with chips, type-to-filter,
 // and the ability to add a brand-new name (which persists to the People table).
@@ -96,12 +97,12 @@ export default function AssigneePicker({
                 aria-label={`Remove ${name}`}
                 onClick={(e) => { e.stopPropagation(); remove(name); }}
               >
-                ✕
+                <XClose size={16} aria-hidden />
               </button>
             </span>
           ))}
         </div>
-        <span className={`ap-caret ${open ? "open" : ""}`} aria-hidden>▾</span>
+        <span className={`ap-caret ${open ? "open" : ""}`} aria-hidden><ChevronDown size={16} /></span>
       </div>
 
       {open && (

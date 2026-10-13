@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { RoadmapInitiative, STRATEGY_GOAL_LABELS, StrategyGoal, ROADMAP_STATUS_OPTIONS, RoadmapStatus } from "@/lib/roadmap-initiatives";
+import { BRAND, TOKENS, OKABE_ITO, tint } from "@/lib/brand";
+import { ChevronRight, Diamond01 } from "@untitledui/icons";
 
 // Timeline fractions: 7-quarter span, Q2 '26 = 0, Q1 '28 = 1
 const Q = [0, 1/7, 2/7, 3/7, 4/7, 5/7, 6/7, 1] as const;
@@ -20,7 +22,7 @@ const GOALS: Goal[] = [
     id: "1",
     label: "GOAL 1 · Grow our Tier 1 city visibility to match the UK",
     shortLabel: "Goal 1 · UK visibility",
-    color: "#0d9488", bg: "#f0fdfa", border: "#99f6e4",
+    color: OKABE_ITO[0], bg: tint(OKABE_ITO[0], 0.05), border: tint(OKABE_ITO[0], 0.25),
     revenue: "£1.8–2.5M",
     subGoals: [
       { id: "1.1", label: "1.1  Increase CVR of Tier 1 cities to UK levels",
@@ -35,7 +37,7 @@ const GOALS: Goal[] = [
     id: "2",
     label: "GOAL 2 · Bring luggage storage to every global travel hub",
     shortLabel: "Goal 2 · Global hubs",
-    color: "#ea580c", bg: "#fff7ed", border: "#fed7aa",
+    color: OKABE_ITO[1], bg: tint(OKABE_ITO[1], 0.08), border: tint(OKABE_ITO[1], 0.35),
     revenue: "£0.4–0.7M",
     revenueNote: "direct · more in 2028+",
     subGoals: [
@@ -51,7 +53,7 @@ const GOALS: Goal[] = [
     id: "3",
     label: "GOAL 3 · Build depth & defensibility in the best locations",
     shortLabel: "Goal 3 · Depth & defensibility",
-    color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe",
+    color: OKABE_ITO[2], bg: tint(OKABE_ITO[2], 0.08), border: tint(OKABE_ITO[2], 0.35),
     revenue: "£0.2–0.4M + moat",
     revenueNote: "indicative",
     subGoals: [
@@ -81,10 +83,10 @@ const MILESTONE_LABELS: Record<number, string> = { [Q[3]]: "£5.0M", [Q[7]]: "£
 const SHADE_ALPHA: Record<string, number> = { heavy: 1, ramp: 0.5, sustain: 0.2 };
 
 const STATUS_STYLES: Record<RoadmapStatus, { bg: string; fg: string; border: string }> = {
-  "Planned":     { bg: "#f1f5f9", fg: "#475569",  border: "#e2e8f0" },
-  "In Progress": { bg: "#eff6ff", fg: "#1d4ed8",  border: "#bfdbfe" },
-  "Done":        { bg: "#f0fdf4", fg: "#15803d",  border: "#bbf7d0" },
-  "On Hold":     { bg: "#fef9c3", fg: "#854d0e",  border: "#fde68a" },
+  "Planned":     { bg: TOKENS.bgEmphasis,  fg: TOKENS.textBody,    border: BRAND.gray[200] },
+  "In Progress": { bg: TOKENS.bgSelected,  fg: BRAND.blue[700],    border: BRAND.blue[200] },
+  "Done":        { bg: TOKENS.successSoft, fg: TOKENS.successText, border: TOKENS.successBorder },
+  "On Hold":     { bg: TOKENS.warningSoft, fg: TOKENS.warningText, border: TOKENS.warningBorder },
 };
 
 function pct(f: number) { return `${(f * 100).toFixed(3)}%`; }
@@ -137,7 +139,7 @@ function GoalDrawer({ scope, roadmapInitiatives, onClose }: DrawerProps) {
 
   let drawerTitle = "";
   let drawerSubtitle = "";
-  let accentColor = "#64748b";
+  let accentColor: string = TOKENS.textTertiary;
   let filteredBySubGoal: { subGoalId: string; subGoalLabel: string; items: RoadmapInitiative[] }[] = [];
 
   if (scope.type === "goal") {
@@ -176,7 +178,7 @@ function GoalDrawer({ scope, roadmapInitiatives, onClose }: DrawerProps) {
         <div className="ss-drawer-header" style={{ borderBottomColor: accentColor + "40" }}>
           <div className="ss-drawer-header-stripe" style={{ background: accentColor }} />
           <div className="ss-drawer-header-text">
-            <h2 className="ss-drawer-title" style={{ color: accentColor }}>{drawerTitle}</h2>
+            <h2 className="ss-drawer-title">{drawerTitle}</h2>
             <p className="ss-drawer-subtitle">{drawerSubtitle}</p>
           </div>
           <button className="ss-drawer-close" onClick={onClose} aria-label="Close">
@@ -188,7 +190,7 @@ function GoalDrawer({ scope, roadmapInitiatives, onClose }: DrawerProps) {
 
         {/* Count badge */}
         <div className="ss-drawer-count-row">
-          <span className="ss-drawer-count" style={{ background: accentColor + "18", color: accentColor }}>
+          <span className="ss-drawer-count" style={{ background: accentColor + "18", color: TOKENS.textPrimary }}>
             {totalCount} initiative{totalCount !== 1 ? "s" : ""}
           </span>
         </div>
@@ -248,7 +250,7 @@ function BarRow({
       <div className="ss-row-label">
         <span className="ss-row-label-text">{sg.label}</span>
         {initiativeCount > 0 && (
-          <span className="ss-row-badge" style={{ background: color + "20", color }}>
+          <span className="ss-row-badge" style={{ background: color + "20", color: TOKENS.textPrimary }}>
             {initiativeCount}
           </span>
         )}
@@ -337,13 +339,13 @@ export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadma
                 >
                   <span className="ssm-goal-stripe" style={{ background: goal.color }} />
                   <span className="ssm-goal-text">
-                    <span className="ssm-goal-title" style={{ color: goal.color }}>{goal.shortLabel}</span>
+                    <span className="ssm-goal-title" style={{ color: TOKENS.textPrimary }}>{goal.shortLabel}</span>
                     <span className="ssm-goal-rev">
                       {goal.revenue}{goal.revenueNote ? ` · ${goal.revenueNote}` : ""}
                     </span>
                   </span>
                   {goalCount > 0 && (
-                    <span className="ssm-goal-count" style={{ background: goal.color + "20", color: goal.color }}>
+                    <span className="ssm-goal-count" style={{ background: goal.color + "20", color: TOKENS.textPrimary }}>
                       {goalCount}
                     </span>
                   )}
@@ -359,7 +361,7 @@ export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadma
                       >
                         <span className="ssm-subgoal-label">{sg.label.trim()}</span>
                         {c > 0 && (
-                          <span className="ssm-subgoal-count" style={{ color: goal.color }}>
+                          <span className="ssm-subgoal-count" style={{ color: TOKENS.textPrimary }}>
                             {c} linked
                           </span>
                         )}
@@ -435,7 +437,7 @@ export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadma
                 <div className="ss-q-tick" />
                 <div className="ss-q-label">
                   {q.label}
-                  {q.note && <span className="ss-q-note"> ▸ {q.note}</span>}
+                  {q.note && <span className="ss-q-note"><ChevronRight size={16} aria-hidden />{q.note}</span>}
                 </div>
               </div>
             ))}
@@ -449,7 +451,7 @@ export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadma
             {TROUGH_FRACS.map((frac) => (
               <div key={frac} className="ss-pin-group" style={{ left: pct(frac) }}>
                 <div className="ss-pin-rev">{MILESTONE_LABELS[frac]}</div>
-                <div className="ss-pin-trough">◆ Cash trough</div>
+                <div className="ss-pin-trough"><Diamond01 size={16} aria-hidden />Cash trough</div>
               </div>
             ))}
           </div>
@@ -469,21 +471,21 @@ export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadma
               >
                 <div className="ss-row-label ss-goal-label-cell">
                   <span className="ss-goal-stripe" style={{ background: goal.color }} />
-                  <span className="ss-goal-heading" style={{ color: goal.color }}>{goal.label}</span>
+                  <span className="ss-goal-heading" style={{ color: TOKENS.textPrimary }}>{goal.label}</span>
                 </div>
                 <div className="ss-row-track ss-goal-track" style={{ background: goal.bg + "80" }}>
                   <div className="ss-goal-track-inner">
-                    <div className="ss-goal-rev" style={{ color: goal.color }}>
+                    <div className="ss-goal-rev" style={{ color: TOKENS.textPrimary }}>
                       {goal.revenue}
                       {goal.revenueNote && <span className="ss-goal-rev-note"> · {goal.revenueNote}</span>}
                     </div>
                     <div className="ss-goal-cta">
                       {goalCount > 0 && (
-                        <span className="ss-goal-count-badge" style={{ background: goal.color + "20", color: goal.color }}>
+                        <span className="ss-goal-count-badge" style={{ background: goal.color + "20", color: TOKENS.textPrimary }}>
                           {goalCount} initiative{goalCount !== 1 ? "s" : ""}
                         </span>
                       )}
-                      <span className="ss-goal-view-btn" style={{ color: goal.color }}>
+                      <span className="ss-goal-view-btn" style={{ color: TOKENS.interactive }}>
                         View all
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                           <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -517,17 +519,17 @@ export default function StasherStrategy({ roadmapInitiatives, onNavigateToRoadma
         <span className="ss-legend-head">Effort:</span>
         {(["Heavy", "Ramping", "Sustain · low"] as const).map((label, i) => (
           <div key={label} className="ss-legend-item">
-            <span className="ss-legend-swatch" style={{ background: "#334155", opacity: [1, 0.5, 0.2][i] }} />
+            <span className="ss-legend-swatch" style={{ background: TOKENS.textBody, opacity: [1, 0.5, 0.2][i] }} />
             {label}
           </div>
         ))}
         <span className="ss-legend-sep" />
         <div className="ss-legend-item">
-          <span className="ss-legend-dashed" style={{ borderColor: "#ef4444" }} />
+          <span className="ss-legend-dashed" style={{ borderColor: TOKENS.errorSolid }} />
           Cash trough
         </div>
         <div className="ss-legend-item">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden style={{ color: "#64748b" }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden style={{ color: TOKENS.textTertiary }}>
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
           Click any row to see linked initiatives

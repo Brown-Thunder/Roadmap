@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft } from "@untitledui/icons";
 
 interface Editor { id: string; email: string; name: string; }
 
@@ -61,7 +62,7 @@ export default function AdminPage() {
             <h1 className="admin-title">Editor access</h1>
             <p className="admin-subtitle">These users can edit the Weekly Priorities board. Everyone else sees a read-only view.</p>
           </div>
-          <Link href="/" className="btn btn-soft">← Back to board</Link>
+          <Link href="/" className="btn btn-soft"><ArrowLeft size={16} aria-hidden />Back to board</Link>
         </div>
 
         <div className="admin-body">
